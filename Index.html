@@ -333,6 +333,7 @@
         if(!pointer.down) setBuzz(0);
         S.trimmerHP=Math.min(100,S.trimmerHP+0.25*dt);
       }
+      head.px=head.x; head.py=head.y;   // advance cut origin so we only trim this frame's movement
       updateTrimmerHUD();
     }
 
