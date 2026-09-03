@@ -1,0 +1,1126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Trim It!</title>
+<link rel="icon" type="image/png" href="assets/favicon.png">
+<link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
+<style>
+  :root{ --grass:#215a11; --fresh:#6ab210; --coin:#f5aa05; }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;height:100%;overflow:hidden;background:#0c130d;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;color:#eaf7ea;user-select:none;}
+  #wrap{position:fixed;inset:0;}
+  canvas{position:absolute;inset:0;width:100%;height:100%;touch-action:none;display:block;image-rendering:pixelated;}
+  #hud{position:absolute;top:0;left:0;right:0;padding:10px 12px;display:flex;align-items:center;gap:8px;
+    pointer-events:none;background:linear-gradient(#0c130dcc,transparent);}
+  #plot{font-weight:700;font-size:14px;opacity:.9;white-space:nowrap;}
+  #barwrap{flex:1;height:12px;border-radius:99px;background:#0000004d;border:1px solid #ffffff22;overflow:hidden;}
+  #bar{height:100%;width:0%;border-radius:99px;background:linear-gradient(90deg,var(--grass),var(--fresh));transition:width .08s linear;}
+  #trimmer,#shovels,#windTag{font-weight:800;font-size:13px;white-space:nowrap;align-items:center;gap:4px;}
+  #shovels{color:#d9c3a5;}
+  #windTag{color:#bcdcee;}
+  #windTag span{display:inline-block;transition:transform .25s ease;}
+  #coins{font-weight:800;font-size:15px;color:var(--coin);white-space:nowrap;display:flex;align-items:center;gap:5px;}
+  #coins::before{content:"";width:14px;height:14px;border-radius:50%;
+    background:radial-gradient(circle at 35% 30%,#fff6c8,var(--coin) 60%,#c9962a);box-shadow:0 0 0 1px #00000030;}
+  .badge{position:absolute;top:52px;left:12px;font-size:10px;letter-spacing:.5px;font-weight:800;
+    background:#ffcf4a;color:#3a2c00;padding:3px 7px;border-radius:6px;opacity:.9;pointer-events:none;}
+  .panel{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    gap:14px;padding:22px;background:#0a100bcc;backdrop-filter:blur(3px);text-align:center;}
+  .hidden{display:none!important;}
+  .panel.hidden{display:none;}
+  .panel h2{margin:0;font-size:24px;}
+  .logo-header{width:82%;max-width:340px;height:auto;image-rendering:pixelated;margin:0 auto 2px;display:block;}
+  .panel p{margin:0;max-width:350px;line-height:1.45;font-size:14px;opacity:.85;}
+  .btn{border:0;border-radius:14px;padding:14px 22px;font-size:16px;font-weight:800;color:#08210d;
+    background:linear-gradient(180deg,#8ee66a,#4faf4f);box-shadow:0 6px 0 #2f6f34,0 10px 18px #0006;cursor:pointer;}
+  .btn:active{transform:translateY(3px);box-shadow:0 3px 0 #2f6f34,0 6px 12px #0006;}
+  .btn.small{padding:10px 14px;font-size:13px;} .btn.ghost{background:#ffffff14;color:#eaf7ea;box-shadow:none;border:1px solid #ffffff2a;}
+  .btn[disabled]{opacity:.5;}
+  .earn{font-size:16px;line-height:1.55} .earn b{color:var(--coin)}
+  .shop{display:flex;flex-direction:column;gap:10px;width:100%;max-width:320px}
+  .up{display:flex;align-items:center;justify-content:space-between;gap:10px;background:#ffffff0f;
+    border:1px solid #ffffff1c;border-radius:14px;padding:10px 12px;}
+  .up .t{text-align:left} .up .t b{font-size:14px} .up .t span{display:block;font-size:11px;opacity:.7;margin-top:2px}
+  .up .lvl{font-size:11px;opacity:.6;margin-top:3px}
+  .tabrow{display:flex;gap:8px;width:100%;max-width:320px;margin-bottom:4px;}
+  .tabrow .tab{flex:1;}
+  .tabrow .tab.active{background:linear-gradient(180deg,#8ee66a,#4faf4f);color:#08210d;box-shadow:none;}
+  .swrow{display:flex;gap:8px;}
+  .swatch{width:26px;height:26px;border-radius:50%;border:2px solid #ffffff33;cursor:pointer;padding:0;}
+  .swatch.sel{border-color:#fff;box-shadow:0 0 0 2px #ffffff55;}
+  .plotlist{display:flex;flex-direction:column;gap:8px;width:100%;max-width:320px;
+    max-height:52vh;overflow-y:auto;padding-right:2px;}
+  .plotrow{display:flex;align-items:center;justify-content:space-between;gap:10px;
+    background:#ffffff0f;border:1px solid #ffffff1c;border-radius:12px;padding:9px 12px;
+    cursor:pointer;text-align:left;color:#eaf7ea;font-size:14px;}
+  .plotrow.frontier{border-color:#7ed95766;background:#7ed95714;}
+  .plotrow small{opacity:.6;display:block;font-size:11px;margin-top:1px;}
+  .hudbtn{pointer-events:auto;background:#ffffff14;border:1px solid #ffffff2a;color:#eaf7ea;
+    border-radius:8px;font-size:12px;padding:4px 8px;cursor:pointer;}
+  #musicBtn{position:absolute;right:12px;bottom:66px;z-index:60;width:40px;height:40px;
+    border-radius:50%;background:#0c130dcc;border:1px solid #ffffff2a;color:#eaf7ea;font-size:18px;
+    line-height:1;display:flex;align-items:center;justify-content:center;cursor:pointer;
+    pointer-events:auto;-webkit-tap-highlight-color:transparent;}
+  .credits{font-size:14px;line-height:2;opacity:.92;margin:2px 0 8px;}
+  .credits p{margin:0;}
+  .fine{font-size:11px;opacity:.55;margin-top:6px;max-width:320px;line-height:1.4}
+  #startPanel{background-image:url(assets/startpanel_bg.jpg);
+    background-size:cover;background-position:center;}
+  #startPanel p,#startPanel .fine{background:#00000060;border-radius:10px;padding:7px 12px;
+    text-shadow:0 2px 3px #000a;opacity:1;}
+  #startPanel .fine{opacity:.85;}
+  .btn-img{border:0;background:transparent;padding:0;cursor:pointer;box-shadow:none;
+    display:flex;flex-direction:column;align-items:center;gap:2px;}
+  .btn-img:active{transform:translateY(1px);}
+  .shopgfx{width:100%;height:auto;display:block;}
+  .start-btn-img{width:76%;max-width:280px;filter:drop-shadow(0 3px 6px #0009);}
+  .loading-label{font-size:13px;color:#ffe9a8;text-shadow:0 1px 3px #000;margin-top:-6px;}
+  .shopgfx-sm{max-width:170px;}
+  .shop-panel-title{width:76%;max-width:240px;margin:0 auto 2px;display:block;}
+  .gfx-cap{font-size:13px;font-weight:800;color:#ffe9a8;text-shadow:0 1px 2px #000a;}
+  .hint{position:absolute;bottom:70px;left:0;right:0;text-align:center;font-size:13px;opacity:.7;
+    pointer-events:none;text-shadow:0 1px 3px #000a;padding:0 16px;}
+  .flash{position:absolute;inset:0;background:#ff3b3b;opacity:0;pointer-events:none;}
+  #adBanner{position:absolute;left:0;right:0;bottom:0;height:54px;z-index:5;
+    background:#0b120d;border-top:1px dashed #ffffff2a;
+    display:flex;align-items:center;justify-content:center;gap:6px;
+    font-size:10px;letter-spacing:.4px;color:#7c8a7e;}
+  #adBanner b{color:#a7b6a9;font-weight:700;}
+  .adbtn{background:#ffcf4a14;border-color:#ffcf4a55;color:#ffe9a8;}
+  .adbtn:active{transform:translateY(1px);}
+  #adPlayPanel{background:#000000ee;z-index:20;}
+  .adplay-box{display:flex;flex-direction:column;align-items:center;gap:10px;}
+  .adplay-label{font-size:13px;letter-spacing:.5px;color:#ffcf4a;font-weight:800;}
+  .adplay-count{font-size:54px;font-weight:800;color:#fff;}
+  .adplay-sub{font-size:13px;opacity:.7;margin-bottom:6px;}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="game"></canvas>
+  <div class="flash" id="flash"></div>
+  <div id="hud">
+    <div id="plot">Plot 1</div>
+    <div id="barwrap"><div id="bar"></div></div>
+    <div id="trimmer" style="display:none">🔧 100%</div>
+    <div id="shovels" style="display:none">⛏ 0</div>
+    <div id="windTag" style="display:none">💨 <span id="windArrow">➤</span></div>
+    <button class="hudbtn adbtn" id="adShovelBtn" style="display:none">▶ +1⛏</button>
+    <div id="coins">0</div>
+    <button class="hudbtn" id="plotsBtn" style="display:none">🗂 Plots</button>
+    <button class="hudbtn" id="shopBtn" style="display:none">🛒</button>
+  </div>
+  <div class="hint" id="hint">Hold &amp; drag to trim the grass</div>
+  <div id="adBanner">AD SPACE — 320×50 banner <b>(mockup)</b></div>
+  <button id="musicBtn" aria-label="Toggle music">🔊</button>
+
+  <div class="panel" id="startPanel">
+    <p>Drag to mow — clear every patch of grass. <b>Tap</b> a flowerbed to water, <b>tap</b> a rock to dig it out. Don't grind the trimmer into rocks.</p>
+    <button class="btn-img start-btn-img" id="startBtn">
+      <img class="shopgfx" src="assets/btn_start.png" alt="Start Trim It!">
+    </button>
+    <div class="loading-label hidden" id="startLoadingLabel">Loading…</div>
+    <button class="btn-img start-btn-img hidden" id="continueBtn">
+      <img class="shopgfx" src="assets/btn_continue.png" alt="Continue">
+    </button>
+    <button class="btn-img start-btn-img hidden" id="newGameBtn">
+      <img class="shopgfx" src="assets/btn_newgame.png" alt="New game">
+    </button>
+    <div class="fine">Small banner ad only — no pop-ups, no forced videos, never mid-play. Optional: watch a short ad anytime for a bonus — always your choice. Progress saves automatically on this device.</div>
+    <button class="btn ghost" id="creditsBtn" style="margin-top:2px">Credits</button>
+  </div>
+  <div class="panel hidden" id="creditsPanel">
+    <h2>Special Thanks To</h2>
+    <div class="credits">
+      <p>My Family &amp; Friends ❤</p>
+      <p>Music by Chilltape FM — Pixabay</p>
+      <p>Music by Oleksii Holubiev — Pixabay</p>
+      <p>Sound Effect by freesound_community — Pixabay</p>
+    </div>
+    <button class="btn" id="creditsBackBtn">Back</button>
+  </div>
+  <div class="panel hidden" id="donePanel">
+    <h2 id="doneTitle">Plot clean! ✨</h2>
+    <div class="earn" id="earnLine"></div>
+    <button class="btn-img adbtn hidden" id="doubleAdBtn">
+      <img class="shopgfx shopgfx-sm" src="assets/btn_double_ad.png" alt="Watch ad — double coins">
+      <div class="gfx-cap" id="doubleAdAmt"></div>
+    </button>
+    <button class="btn-img" id="openShopBtn">
+      <img class="shopgfx" style="max-width:240px" src="assets/btn_open_shop.png" alt="Shop">
+    </button>
+    <button class="btn" id="nextBtn">Next plot →</button>
+    <button class="btn ghost" id="choosePlotBtn">Choose a plot to replay</button>
+    <div class="fine">No pop-ups. No forced videos. Upgrades earned by playing.</div>
+  </div>
+  <div class="panel hidden" id="shopPanel">
+    <img class="shopgfx shop-panel-title" src="assets/shop_title.png" alt="Shop">
+    <div class="tabrow">
+      <button class="btn small tab active" id="tabUpgrades">Upgrades</button>
+      <button class="btn small ghost tab" id="tabCosmetics">Cosmetics</button>
+    </div>
+    <div class="shop" id="shopUpgrades"></div>
+    <div class="shop hidden" id="shopCosmetics"></div>
+    <button class="btn ghost small" id="shopBackBtn">Back</button>
+  </div>
+  <div class="panel hidden" id="selectPanel">
+    <h2>Choose a plot</h2>
+    <div class="plotlist" id="plotList"></div>
+    <button class="btn ghost small" id="selectBackBtn">Back</button>
+  </div>
+  <div class="panel hidden" id="overPanel">
+    <h2>Trimmer broke! 🔧💥</h2>
+    <p id="overStats"></p>
+    <button class="btn" id="restartBtn">Start over</button>
+    <div class="fine">Grinding the spinning line into rocks wears it out. Steer around them — or dig them with a shovel.</div>
+  </div>
+  <div class="panel hidden" id="adPlayPanel">
+    <div class="adplay-box">
+      <div class="adplay-label">▶ AD PLAYING <span style="opacity:.6">(mockup)</span></div>
+      <div class="adplay-count" id="adCount">5</div>
+      <div class="adplay-sub" id="adSub">Reward unlocks when the ad finishes</div>
+      <button class="btn ghost small" id="adSkipBtn">Close (no reward)</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const TILE_SRC = {"grass_short": "assets/grass_short.png", "grass_tall": "assets/grass_tall.png", "grass_flowers": "assets/grass_flowers.png", "grass_rock": "assets/grass_rock.png", "grass_debris": "assets/grass_debris.png", "grass_tall_summer": "assets/grass_tall_summer.png", "grass_tall_autumn": "assets/grass_tall_autumn.png", "grass_tall_fall": "assets/grass_tall_fall.png", "grass_tall_winter": "assets/grass_tall_winter.png", "grass_flowers_summer": "assets/grass_flowers_summer.png", "grass_flowers_autumn": "assets/grass_flowers_autumn.png", "grass_flowers_fall": "assets/grass_flowers_fall.png", "grass_flowers_winter": "assets/grass_flowers_winter.png", "grass_rock_summer": "assets/grass_rock_summer.png", "grass_rock_autumn": "assets/grass_rock_autumn.png", "grass_rock_fall": "assets/grass_rock_fall.png", "grass_rock_winter": "assets/grass_rock_winter.png", "grass_debris_summer": "assets/grass_debris_summer.png", "grass_debris_autumn": "assets/grass_debris_autumn.png", "grass_debris_fall": "assets/grass_debris_fall.png", "grass_debris_winter": "assets/grass_debris_winter.png", "grass_final_summer": "assets/grass_final_summer.png", "grass_final_autumn": "assets/grass_final_autumn.png", "grass_final_fall": "assets/grass_final_fall.png", "grass_final_winter": "assets/grass_final_winter.png", "grass_bush_summer": "assets/grass_bush_summer.png", "grass_bush_autumn": "assets/grass_bush_autumn.png", "grass_bush_fall": "assets/grass_bush_fall.png", "grass_bush_winter": "assets/grass_bush_winter.png", "fx_watercan": "assets/fx_watercan.png"};
+(() => {
+  "use strict";
+  const canvas=document.getElementById("game"), ctx=canvas.getContext("2d");
+  let W=0,H=0,DPR=1;
+  const CELL=40, TOUCH_OFFSET=52, CUTMAX=4, BANNER_H=54;
+  let cols=0,rows=0,offX=0,offY=0,playW=0,playH=0;
+
+  // types: 0 grass,1 cut,2 flower,3 flowerHit,4 rock,5 empty,6 watered,7 debris,10 scorch
+  const S={ phase:"menu",level:1,coins:0, grid:null,cutLvl:null,total:0,cut:0,
+    flowerHits:0,plotBonus:0,wateredBeds:0, shovels:1,plotRocks:false,plotBushes:false,plotDebris:false, trimmerHP:100,shake:0,
+    up:{radius:0,turbo:0}, maxLevel:1, replay:false, hadBeds:false, mowerColor:"#ed7705",
+    lastEarned:0, doubleClaimed:false, hasGloves:false,
+    weather:"clear", grassMask:null, rainAccum:0, windDir:0, windPhase:0,
+    thunder:false, thunderAccum:0, boltFlash:0 };
+  const MOWER_COLORS=["#ed7705","#6ab210","#f5aa05","#5996b9","#909899","#f8f8f5"];
+  let rainDrops=[], windParticles=[], strikes=[];
+
+  // Seasons cycle as you progress plots — every SEASON_LEVELS plots the palette shifts.
+  const SEASONS=["summer","autumn","fall","winter"];
+  const SEASON_LEVELS=15;
+  const SEASON_EMOJI={summer:"☀️",autumn:"🍂",fall:"🍁",winter:"❄️"};
+  const seasonFor=(lvl)=>SEASONS[Math.floor((lvl-1)/SEASON_LEVELS)%4];
+
+  const RADIUS_BASE=30,RADIUS_STEP=10,RADIUS_MAX=6, LERP_BASE=0.18,LERP_STEP=0.08,TURBO_MAX=6;
+  const radiusPx=()=>RADIUS_BASE+S.up.radius*RADIUS_STEP;
+  const lerpAmt =()=>LERP_BASE+S.up.turbo*LERP_STEP;
+  // Precision-by-speed: slow, careful drags always get the small base radius (same
+  // precision as an un-upgraded trimmer) so upgrades add top-end speed without ever
+  // making a perfect cut harder to pull off. Fast swipes get the full upgraded width.
+  const SPEED_REF=13;  // px/frame (at 60fps) considered "fast" -> full upgraded radius
+  const effRadiusPx=()=>{
+    const f=Math.max(0,Math.min(1, pointer.speed/SPEED_REF));
+    return RADIUS_BASE + (radiusPx()-RADIUS_BASE)*f;
+  };
+
+  const pointer={x:-999,y:-999,ax:-999,ay:-999,lax:-999,lay:-999,off:0,
+    down:false,dragging:false,downX:0,downY:0, speed:0, dispRadius:RADIUS_BASE};
+  const head={x:-999,y:-999,px:-999,py:-999,spin:0};
+  let particles=[], rockContact=false, waterEffects=[], gloveEffects=[];
+
+  // ---- save/continue (persists across visits once hosted on your own domain) ----
+  const SAVE_KEY="trim_save_v1";
+  function saveGame(){ try{ localStorage.setItem(SAVE_KEY, JSON.stringify({
+    coins:S.coins, maxLevel:S.maxLevel, upR:S.up.radius, upT:S.up.turbo,
+    shovels:S.shovels, color:S.mowerColor, gloves:S.hasGloves })); }catch(e){} }
+  function loadGame(){ try{ const raw=localStorage.getItem(SAVE_KEY); if(!raw) return null;
+    const d=JSON.parse(raw); if(typeof d.coins!=="number") return null; return d; }catch(e){ return null; } }
+  function clearSave(){ try{ localStorage.removeItem(SAVE_KEY); }catch(e){} }
+
+  // ---- background music (lofi soundtrack) ------------------------------------
+  // 1) Put your .mp3 files in  assets/music/
+  // 2) List their filenames below. They play as a shuffled, looping playlist;
+  //    a missing/failed file is skipped, and if none load the game just stays
+  //    silent (no errors). Volume is kept low so the SFX sit on top.
+  const MUSIC_TRACKS = [
+    "assets/music/TrimIt_Theme_Song-gentle-fields-194622.mp3",
+    "assets/music/chilltapefm-chasing-sunlight-lofi-369640.mp3",
+    "assets/music/chilltapefm-morning-breeze-383960.mp3",
+    "assets/music/chilltapefm-rainy-cafe-1-lofi-370185.mp3",
+    "assets/music/chilltapefm-sunny-stop-lofi-371187.mp3",
+    "assets/music/chilltapefm-swaying-grasses-nature-lofi-370154.mp3",
+  ];
+  const MUSIC_VOLUME = 0.4;                 // 0..1
+  const MUSIC_MUTE_KEY = "trim_music_muted";
+
+  const Music = (function(){
+    let el=null, order=[], idx=0, started=false, fails=0;
+    let muted=(function(){ try{ return localStorage.getItem(MUSIC_MUTE_KEY)==="1"; }catch(e){ return false; } })();
+    function shuffle(a){ for(let i=a.length-1;i>0;i--){ const j=(Math.random()*(i+1))|0; const t=a[i];a[i]=a[j];a[j]=t; } return a; }
+    function ensureEl(){
+      if(el) return;
+      el=new Audio(); el.volume=MUSIC_VOLUME;
+      el.addEventListener("ended", ()=>{ fails=0; advance(); });
+      el.addEventListener("error", ()=>{ fails++; if(fails>=order.length){ started=false; return; } advance(); });
+      el.addEventListener("playing", ()=>{ fails=0; });
+    }
+    function playCurrent(){ if(!order.length) return; ensureEl(); el.src=order[idx];
+      const p=el.play(); if(p&&p.catch) p.catch(()=>{}); }
+    function advance(){ if(!order.length) return; idx=(idx+1)%order.length; playCurrent(); }
+    return {
+      // called on the first user gesture — browsers block autoplay before one
+      start(){ if(started||muted||!MUSIC_TRACKS.length) return;
+        order=shuffle(MUSIC_TRACKS.slice()); idx=0; fails=0; started=true; playCurrent(); },
+      isMuted(){ return muted; },
+      toggle(){
+        muted=!muted;
+        try{ localStorage.setItem(MUSIC_MUTE_KEY, muted?"1":"0"); }catch(e){}
+        if(muted){ if(el) el.pause(); }
+        else { if(!started) this.start(); else if(el){ const p=el.play(); if(p&&p.catch) p.catch(()=>{}); } }
+        return muted;
+      }
+    };
+  })();
+
+  // ---- tile loading + per-cell-size cache ----
+  const IMG={}, TILE={}; let tilesReady=false, startPending=false;
+  function preload(cb){ const keys=Object.keys(TILE_SRC); let n=keys.length;
+    if(!n){ tilesReady=true; cb(); return; }
+    keys.forEach(k=>{ const im=new Image();
+      im.onload=()=>{ IMG[k]=im; if(--n===0){ tilesReady=true; cb(); } };
+      im.onerror=()=>{ if(--n===0){ tilesReady=true; cb(); } };
+      im.src=TILE_SRC[k]; }); }
+  function buildTileCache(){ const s=Math.round(CELL*DPR);
+    for(const k in IMG){ const c=document.createElement("canvas"); c.width=s;c.height=s;
+      const cx=c.getContext("2d"); cx.imageSmoothingEnabled=false;
+      cx.drawImage(IMG[k],0,0,IMG[k].naturalWidth,IMG[k].naturalHeight,0,0,s,s); TILE[k]=c; } }
+
+  function resize(){
+    DPR=Math.min(2,window.devicePixelRatio||1);
+    W=window.innerWidth;H=window.innerHeight;
+    canvas.width=Math.round(W*DPR); canvas.height=Math.round(H*DPR);
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+    layout(); if(tilesReady) buildTileCache();
+  }
+  function layout(){ const padX=14,padTop=46,padBot=BANNER_H+40;
+    playW=W-padX*2; playH=H-padTop-padBot;
+    cols=Math.max(5,Math.floor(playW/CELL)); rows=Math.max(6,Math.floor(playH/CELL));
+    offX=Math.round(padX+(playW-cols*CELL)/2); offY=Math.round(padTop); }
+
+  function newPlot(){
+    layout();
+    S.grid=new Uint8Array(cols*rows); S.cutLvl=new Float32Array(cols*rows); S.mowedAt=new Float64Array(cols*rows);
+    S.total=cols*rows; S.cut=0; S.flowerHits=0; S.plotBonus=0; S.wateredBeds=0;
+
+    // Difficulty scales continuously with level (sqrt/linear blends, generous caps)
+    // instead of plateauing after a couple dozen plots.
+    const beds=S.level>=2?Math.min(14,1+Math.floor(Math.sqrt(S.level))):0;
+    S.hadBeds=beds>0;
+    for(let b=0;b<beds;b++){ const bw=1+Math.floor(Math.random()*2), bh=1+Math.floor(Math.random()*2);
+      const bx=1+Math.floor(Math.random()*(cols-bw-2)), by=1+Math.floor(Math.random()*(rows-bh-2));
+      // Guard against overlapping flowerbeds: only claim cells that are still plain grass,
+      // so S.total (the mow target) never gets decremented more than once per cell.
+      for(let y=by;y<by+bh;y++) for(let x=bx;x<bx+bw;x++){ const bi=y*cols+x;
+        if(S.grid[bi]===0){ S.grid[bi]=2; S.total--; } } }
+    let placedRocks=0; const rocks=S.level>=3?Math.min(18,1+Math.floor(S.level/4)):0;
+    for(let i=0;i<rocks;i++){ const rx=1+Math.floor(Math.random()*(cols-2)), ry=1+Math.floor(Math.random()*(rows-2));
+      if(S.grid[ry*cols+rx]===0){ S.grid[ry*cols+rx]=4; S.total--; placedRocks++; } }
+    S.plotRocks=placedRocks>0;
+    let placedDebris=0; const debris=S.level>=2?Math.min(16,2+Math.floor(S.level/4.5)):2;
+    for(let i=0;i<debris;i++){ const dx=Math.floor(Math.random()*cols), dy=Math.floor(Math.random()*rows);
+      if(S.grid[dy*cols+dx]===0){ S.grid[dy*cols+dx]=7; S.total--; placedDebris++; } }  // hazard until gloves purchased
+    S.plotDebris=placedDebris>0;
+    let placedBushes=0; const bushes=S.level>=4?Math.min(12,1+Math.floor(S.level/5)):0;
+    for(let i=0;i<bushes;i++){ const rx=1+Math.floor(Math.random()*(cols-2)), ry=1+Math.floor(Math.random()*(rows-2));
+      if(S.grid[ry*cols+rx]===0){ S.grid[ry*cols+rx]=8; S.total--; placedBushes++; } }
+    S.plotBushes=placedBushes>0;
+
+    // Snapshot which cells are true mowable grass (not beds/rocks/debris/bushes) —
+    // rain only regrows *this* set, never obstacles or flowerbeds.
+    const gmask=new Uint8Array(cols*rows);
+    for(let i=0;i<S.grid.length;i++) if(S.grid[i]===0) gmask[i]=1;
+    S.grassMask=gmask;
+
+    // Weather: from plot 5 onward a plot can start rainy or windy (mutually exclusive).
+    // Both odds ramp with level, so late-game weather is a real recurring pressure.
+    S.weather="clear";
+    if(S.level>=5){
+      const rainP=Math.min(0.4,0.06+S.level*0.006);
+      const windP=S.level>=8?Math.min(0.4,0.05+S.level*0.006):0;
+      const roll=Math.random();
+      if(roll<rainP) S.weather="rain"; else if(roll<rainP+windP) S.weather="wind";
+    }
+    S.rainAccum=0;
+    rainDrops = S.weather==="rain" ? seedRainDrops() : [];
+    S.windDir = Math.random()*Math.PI*2;
+    S.windPhase = Math.random()*100;
+    S.windAccum=0;
+    windParticles = S.weather==="wind" ? seedWindParticles() : [];
+
+    // Thunder: an escalation layered on top of rain, only from higher levels.
+    // Not a separate weather roll — it makes late-game rainy plots meaningfully harsher.
+    S.thunder = S.weather==="rain" && S.level>=20 && Math.random()<Math.min(0.5,0.05+(S.level-20)*0.01);
+    S.thunderAccum=0; S.boltFlash=0;
+    strikes=[];
+    if(S.thunder){
+      let seen=false; try{ seen=!!localStorage.getItem("trim_seen_thunder_warning"); }catch(e){}
+      if(!seen){
+        try{ localStorage.setItem("trim_seen_thunder_warning","1"); }catch(e){}
+        setTimeout(()=>{ alert("⚡ Heads up: this plot has brief lightning-glow effects. If flashing lights bother you, you can still finish the plot safely — the glow is soft and non-repeating."); },30);
+      }
+    }
+
+    updateHUD();
+    let h="Drag to trim";
+    if(S.level>=2) h+= S.weather==="rain" ? " · flowers already getting rain — tap to top off 💧" : " · tap flowers to water 💧";
+    if(S.plotRocks) h+=" · tap rocks to dig ⛏";
+    if(S.plotBushes) h+=" · tap bushes to trim ✂️";
+    if(S.plotDebris&&!S.hasGloves) h+=" · debris hurts the trimmer — buy gloves 🧤";
+    if(S.weather==="rain") h+=" · rain regrows mowed grass — work fast! 🌧️";
+    if(S.weather==="wind") h+=" · gusts push the trimmer off course — steer against it 💨";
+    if(S.thunder) h+=" · lightning strikes nearby — dodge the glow! ⚡";
+    const hn=document.getElementById("hint"); hn.textContent=h; hn.style.opacity="0.7";
+  }
+
+  // ---- rain weather: falling streaks + periodic regrowth of already-mowed grass ----
+  function seedRainDrops(){
+    const n=Math.min(90,50+Math.floor(playH/8));
+    const arr=[]; for(let i=0;i<n;i++) arr.push(spawnRainDrop(true)); return arr;
+  }
+  function spawnRainDrop(anyY){
+    return { x:Math.random()*(W+140)-70, y:anyY?Math.random()*(H+200)-100:-20-Math.random()*40,
+      vx:-2.4-Math.random()*1.2, vy:9+Math.random()*5, len:14+Math.random()*10 };
+  }
+  const RAIN_REGROW_BASE=1900, RAIN_REGROW_MIN=950;
+  // A tile can't be regrown by rain until this long after it was mowed. This is
+  // the knob to tune: bigger = longer breather before cleared grass comes back.
+  const RAIN_REGROW_GRACE=5000;
+  function rainInterval(){ return RAIN_REGROW_BASE; }   // flat cadence — no per-plot scaling
+  function rainRegrowCount(){ return 1; }               // flat — one tile per wave on every plot
+  function updateRain(dt){
+    for(const d of rainDrops){ d.x+=d.vx*dt; d.y+=d.vy*dt;
+      if(d.y>H+20||d.x<-160){ Object.assign(d, spawnRainDrop(false)); } }
+    if(S.phase!=="play"||S.weather!=="rain") return;
+    S.rainAccum+=dt*16.67;
+    if(S.rainAccum<rainInterval()) return;
+    S.rainAccum=0;
+    const now=performance.now();
+    const candidates=[];
+    for(let i=0;i<S.grid.length;i++){ if(S.grassMask[i]&&S.grid[i]===1&&(now-S.mowedAt[i])>=RAIN_REGROW_GRACE) candidates.push(i); }
+    if(!candidates.length) return;
+    const n=Math.min(rainRegrowCount(),candidates.length);
+    for(let k=0;k<n;k++){ const pick=Math.floor(Math.random()*candidates.length);
+      const idx=candidates.splice(pick,1)[0];
+      S.grid[idx]=0; S.cutLvl[idx]=0; S.cut=Math.max(0,S.cut-1);
+      const c=idx%cols, r=(idx/cols)|0, cx=offX+c*CELL+CELL/2, cy=offY+r*CELL+CELL/2;
+      // Distinct color from the flowerbed watering splash (#8fd3ff) — same-color particles
+      // were reading as "rain waters the flowers," which isn't what's actually happening.
+      spawnClippings(cx,cy,"#6a93b0");
+    }
+    updateHUD();
+  }
+
+  // ---- wind weather: steady gust pushes the trimmer off-line + periodically
+  // blows loose debris tiles to a new spot ----
+  function seedWindParticles(){
+    const n=Math.min(26,16+Math.floor(playH/20));
+    const arr=[]; for(let i=0;i<n;i++) arr.push(spawnWindParticle(true)); return arr;
+  }
+  function spawnWindParticle(anyPos){
+    const speed=1.4+Math.random()*1.6;
+    const ang=S.windDir+(Math.random()-0.5)*0.5;
+    const vx=Math.cos(ang)*speed, vy=Math.sin(ang)*speed;
+    let x,y;
+    if(anyPos){ x=Math.random()*W; y=Math.random()*H; }
+    else{ x=W/2-Math.cos(S.windDir)*W*0.8+(Math.random()-0.5)*W*1.3;
+      y=H/2-Math.sin(S.windDir)*H*0.8+(Math.random()-0.5)*H*1.3; }
+    return { x,y,vx,vy,rot:Math.random()*7,vr:(Math.random()-0.5)*0.12,
+      kind:Math.random()<0.55?"leaf":"twig" };
+  }
+  const WIND_DEBRIS_BASE=2400, WIND_DEBRIS_MIN=900;
+  function windInterval(){ return Math.max(WIND_DEBRIS_MIN, WIND_DEBRIS_BASE-S.level*14); }
+  function updateWind(dt){
+    for(const p of windParticles){ p.x+=p.vx*dt; p.y+=p.vy*dt; p.rot+=p.vr*dt;
+      if(p.x<-80||p.x>W+80||p.y<-80||p.y>H+80) Object.assign(p, spawnWindParticle(false)); }
+    if(S.phase!=="play"||S.weather!=="wind") return;
+    S.windAccum=(S.windAccum||0)+dt*16.67;
+    if(S.windAccum<windInterval()) return;
+    S.windAccum=0;
+    // Blow one debris tile downwind onto an adjacent still-uncut grass cell.
+    const debrisIdx=[];
+    for(let i=0;i<S.grid.length;i++) if(S.grid[i]===7) debrisIdx.push(i);
+    if(!debrisIdx.length) return;
+    const idx=debrisIdx[Math.floor(Math.random()*debrisIdx.length)];
+    const c=idx%cols, r=(idx/cols)|0;
+    const dxw=Math.round(Math.cos(S.windDir)), dyw=Math.round(Math.sin(S.windDir));
+    const tries=[[dxw,dyw],[dxw,0],[0,dyw],[1,0],[-1,0],[0,1],[0,-1]];
+    for(const [ddx,ddy] of tries){
+      if(ddx===0&&ddy===0) continue;
+      const nc=c+ddx, nr=r+ddy;
+      if(nc<0||nc>=cols||nr<0||nr>=rows) continue;
+      const nIdx=nr*cols+nc;
+      if(S.grassMask[nIdx]===1&&S.grid[nIdx]===0){
+        // Vacated cell rejoins the grass total (it now needs mowing);
+        // the newly-covered cell drops out, same as at plot creation.
+        S.grid[idx]=0; S.grassMask[idx]=1; S.total++; S.cutLvl[idx]=0;
+        S.grid[nIdx]=7; S.grassMask[nIdx]=0; S.total--; S.cutLvl[nIdx]=0;
+        updateHUD();
+        break;
+      }
+    }
+  }
+  function windForce(dt){
+    if(S.weather!=="wind") return;
+    S.windPhase+=dt*0.05;
+    const gust=0.55+0.45*Math.sin(S.windPhase);
+    const strength=1.1+Math.min(3.0,S.level*0.025);
+    head.x+=Math.cos(S.windDir)*strength*gust*dt;
+    head.y+=Math.sin(S.windDir)*strength*gust*dt;
+  }
+
+  // ---- thunder: telegraphed strikes during a storm (rain + high level) ----
+  // Each strike: warn (flash the target tile) -> bolt (impact: damage or golden bonus)
+  // -> scorch (a temporary hazard tile that fades back to grass), unless golden.
+  const WARN_MS=850, BOLT_MS=220, SCORCH_MS=3200, GOLDEN_CHANCE=0.14;
+  function thunderInterval(){ return Math.max(1500, 3800-S.level*18); }
+  function spawnStrike(){
+    if(!S.grid) return;
+    const golden=Math.random()<GOLDEN_CHANCE;
+    let idx;
+    if(golden){
+      const obstacles=[]; for(let i=0;i<S.grid.length;i++){ const t=S.grid[i]; if(t===4||t===7||t===8) obstacles.push(i); }
+      if(obstacles.length) idx=obstacles[Math.floor(Math.random()*obstacles.length)];
+      else { const g=[]; for(let i=0;i<S.grid.length;i++) if(S.grassMask[i]) g.push(i);
+        if(!g.length) return; idx=g[Math.floor(Math.random()*g.length)]; }
+    } else {
+      const candidates=[]; for(let i=0;i<S.grid.length;i++){ if(S.grassMask[i]&&(S.grid[i]===0||S.grid[i]===1)) candidates.push(i); }
+      if(!candidates.length) return;
+      idx=candidates[Math.floor(Math.random()*candidates.length)];
+    }
+    const c=idx%cols, r=(idx/cols)|0;
+    const x=offX+c*CELL+CELL/2, y=offY+r*CELL+CELL/2;
+    // Jagged bolt path generated once so it doesn't flicker frame to frame.
+    const pts=[]; const steps=6;
+    for(let i=0;i<=steps;i++){ const f=i/steps;
+      pts.push({x:x+(Math.random()-0.5)*22*(1-f), y:offY+(y-offY)*f}); }
+    strikes.push({idx,c,r,x,y,golden,phase:"warn",t:0,pts});
+  }
+  function resolveStrike(s){
+    const idx=s.idx;
+    if(s.golden){
+      const t=S.grid[idx];
+      if(t===4||t===7){ S.grid[idx]=1; S.cutLvl[idx]=CUTMAX; S.total++; S.cut++;
+        if(!S.replay){ S.coins+=15; S.plotBonus+=15; } }
+      else if(t===8){ S.grid[idx]=9; if(!S.replay){ S.coins+=15; S.plotBonus+=15; } }
+      else if(t===0){ S.grid[idx]=1; S.cutLvl[idx]=CUTMAX; S.cut++; if(!S.replay){ S.coins+=15; S.plotBonus+=15; } }
+      for(let i=0;i<14;i++) spawnClippings(s.x,s.y,Math.random()<0.5?"#ffe27a":"#fff6c8");
+      vibrate([10,20,10,20,10]); updateHUD(); checkDone();
+    } else {
+      const dx=head.x-s.x, dy=head.y-s.y;
+      if(Math.hypot(dx,dy)<CELL*0.9){
+        S.trimmerHP=Math.max(0,S.trimmerHP-22); S.shake=Math.min(1,S.shake+0.8);
+        vibrate([20,40,20]);
+        if(S.trimmerHP<=0) gameOver();
+      }
+      if(S.grassMask[idx]){
+        if(S.grid[idx]===1) S.cut=Math.max(0,S.cut-1);
+        S.grid[idx]=10; S.cutLvl[idx]=0;
+        updateHUD();
+      }
+      for(let i=0;i<10;i++) spawnClippings(s.x,s.y,Math.random()<0.5?"#5c4630":"#2c2018");
+    }
+    S.boltFlash=Math.min(1,S.boltFlash+(s.golden?0.18:0.28));
+    updateTrimmerHUD();
+  }
+  function updateThunder(dt){
+    for(let i=strikes.length-1;i>=0;i--){ const s=strikes[i]; s.t+=dt*16.67;
+      if(s.phase==="warn"){
+        if(s.t>=WARN_MS){ s.phase="bolt"; s.t=0; resolveStrike(s); if(S.phase!=="play") return; }
+      } else if(s.phase==="bolt"){
+        if(s.t>=BOLT_MS){ if(s.golden){ strikes.splice(i,1); } else { s.phase="scorch"; s.t=0; } }
+      } else if(s.phase==="scorch"){
+        if(S.grid[s.idx]!==10||s.t>=SCORCH_MS){
+          if(S.grid[s.idx]===10){ S.grid[s.idx]=0; S.cutLvl[s.idx]=0; }
+          strikes.splice(i,1);
+        }
+      }
+    }
+    if(S.phase!=="play"||!S.thunder) return;
+    S.thunderAccum+=dt*16.67;
+    if(S.thunderAccum<thunderInterval()) return;
+    S.thunderAccum=0;
+    spawnStrike();
+  }
+
+  const cellRect=(c,r)=>({x:offX+c*CELL,y:offY+r*CELL});
+  function cellAt(px,py){ const c=Math.floor((px-offX)/CELL), r=Math.floor((py-offY)/CELL);
+    if(c<0||r<0||c>=cols||r>=rows) return null; return {c,r,idx:r*cols+c}; }
+
+  function tileFor(idx){
+    const t=S.grid[idx];
+    const season=seasonFor(S.level);
+    if(t===1) return "grass_final_"+season;
+    if(t===2||t===3||t===6) return "grass_flowers_"+season;
+    if(t===4) return "grass_rock_"+season;
+    if(t===7) return "grass_debris_"+season;
+    if(t===8||t===9) return "grass_bush_"+season;
+    if(t===10) return "grass_final_"+season;  // scorch draws on the cut-grass base, dark overlay added in render()
+    return "grass_tall_"+season;  // uncut/being-mowed: stays tall until the cell fully completes (t===1 above)
+  }
+
+  let hapticAccum=0, cutSinceHaptic=0;
+  function cutAt(px,py,rad){
+    const c0=Math.floor((px-offX-rad)/CELL),c1=Math.floor((px-offX+rad)/CELL);
+    const r0=Math.floor((py-offY-rad)/CELL),r1=Math.floor((py-offY+rad)/CELL);
+    let didCut=false;
+    for(let r=Math.max(0,r0);r<=Math.min(rows-1,r1);r++) for(let c=Math.max(0,c0);c<=Math.min(cols-1,c1);c++){
+      const cx=offX+c*CELL+CELL/2, cy=offY+r*CELL+CELL/2, dx=cx-px,dy=cy-py;
+      if(dx*dx+dy*dy>rad*rad) continue;
+      const idx=r*cols+c, t=S.grid[idx];
+      if(t===0){
+        if(S.cutLvl[idx]<CUTMAX){
+          S.cutLvl[idx]=Math.min(CUTMAX,S.cutLvl[idx]+0.7); didCut=true; cutSinceHaptic++;
+          spawnClippings(cx,cy);
+          if(S.cutLvl[idx]>=CUTMAX){ S.grid[idx]=1; S.cut++; S.mowedAt[idx]=performance.now(); for(let i=0;i<4;i++) spawnClippings(cx,cy); }
+        }
+      } else if(t===7){
+        rockContact=true; if(Math.random()<0.5) spawnClippings(cx,cy,Math.random()<0.5?"#8b6b4a":"#5c4630");
+      } else if(t===2||t===6){ S.grid[idx]=3; S.flowerHits++; penaltyFlash();
+        spawnClippings(cx,cy,"#ff9db6"); buzzBump(true); }
+      else if(t===4){ rockContact=true; if(Math.random()<0.5) spawnClippings(cx,cy,Math.random()<0.5?"#ffd27a":"#ff8a3a"); }
+      else if(t===8||t===9){ S.flowerHits++; penaltyFlash();
+        spawnClippings(cx,cy,"#ff9db6"); buzzBump(true); }
+      else if(t===10){ rockContact=true; if(Math.random()<0.5) spawnClippings(cx,cy,"#2c2018"); }
+    }
+    if(didCut) buzzBump(false);
+    return didCut;
+  }
+
+  function spawnClippings(x,y,color){ if(particles.length>440) return;
+    const n=3+(Math.random()*3|0);
+    for(let i=0;i<n;i++){ const a=Math.random()*Math.PI*2,sp=1+Math.random()*3.2;
+      particles.push({x,y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp-1.5,life:1,rot:Math.random()*6,vr:(Math.random()-.5)*0.4,
+        col:color||(Math.random()<0.4?"#8ee66a":"#3f9a3d"),len:3+Math.random()*3}); } }
+
+  function handleTap(px,py){ const cell=cellAt(px,py); if(!cell) return;
+    const t=S.grid[cell.idx]; if(t===4) digRock(cell); else if(t===2) waterBed(cell); else if(t===8) trimBush(cell);
+    else if(t===7) clearDebris(cell); }
+  function clearDebris(cell){ if(!S.hasGloves){ vibrate(4); flashGlovesNeeded(); return; }
+    S.grid[cell.idx]=1; S.cutLvl[cell.idx]=CUTMAX; S.total++; S.cut++;
+    if(!S.replay){ const b=8; S.coins+=b; S.plotBonus+=b; }
+    const cx=offX+cell.c*CELL+CELL/2,cy=offY+cell.r*CELL+CELL/2;
+    for(let i=0;i<8;i++) spawnClippings(cx,cy,"#b98a52");
+    gloveEffects.push({x:cx,y:cy,life:1});
+    vibrate([10,30,10]); updateHUD(); checkDone(); }
+  function flashGlovesNeeded(){ const hn=document.getElementById("hint");
+    const prev=hn.textContent; hn.textContent="Need gloves to clear debris 🧤"; hn.style.opacity="0.9";
+    clearTimeout(flashGlovesNeeded._t);
+    flashGlovesNeeded._t=setTimeout(()=>{ hn.textContent=prev; hn.style.opacity="0.7"; },1200); }
+  function trimBush(cell){
+    S.grid[cell.idx]=9;
+    if(!S.replay){ const b=10; S.coins+=b; S.plotBonus+=b; }
+    const cx=offX+cell.c*CELL+CELL/2,cy=offY+cell.r*CELL+CELL/2;
+    for(let i=0;i<10;i++) spawnClippings(cx,cy,"#6ab210");
+    vibrate([8,20,8]); updateHUD(); }
+  function digRock(cell){ if(S.shovels<=0){ vibrate(4); flashShovelEmpty(); return; }
+    S.shovels--; S.grid[cell.idx]=1; S.cutLvl[cell.idx]=CUTMAX; S.total++; S.cut++;
+    if(!S.replay){ const b=15; S.coins+=b; S.plotBonus+=b; }
+    const cx=offX+cell.c*CELL+CELL/2,cy=offY+cell.r*CELL+CELL/2;
+    for(let i=0;i<12;i++) spawnClippings(cx,cy,"#8b6b4a");
+    vibrate([10,30,10]); updateHUD(); checkDone(); }
+  function waterBed(cell){
+    const stack=[cell.idx],seen=new Set(),toW=[];
+    while(stack.length){ const id=stack.pop(); if(seen.has(id)) continue; seen.add(id);
+      const t=S.grid[id]; if(t!==2&&t!==6) continue; if(t===2) toW.push(id);
+      const c=id%cols,r=(id/cols)|0;
+      if(c>0)stack.push(id-1); if(c<cols-1)stack.push(id+1); if(r>0)stack.push(id-cols); if(r<rows-1)stack.push(id+cols); }
+    if(!toW.length) return;
+    for(const id of toW) S.grid[id]=6;
+    S.wateredBeds++;
+    // Rain already gives beds a head start, so a tap during rain tops them off for a
+    // smaller bonus rather than the full amount — still worth doing, just not double-dipping.
+    const perCell = S.weather==="rain" ? 4 : 8;
+    if(!S.replay){ const b=toW.length*perCell; S.coins+=b; S.plotBonus+=b; }
+    const cx=offX+cell.c*CELL+CELL/2,cy=offY+cell.r*CELL+CELL/2;
+    for(let i=0;i<14;i++) spawnClippings(cx,cy,"#8fd3ff");
+    waterEffects.push({x:cx,y:cy,life:1});
+    vibrate([8,25,8]); updateHUD(); }
+  function flashShovelEmpty(){ const sh=document.getElementById("shovels");
+    sh.style.color="#ff6b6b"; setTimeout(()=>sh.style.color="#d9c3a5",250); }
+
+  let last=performance.now();
+  function frame(now){
+    const dt=Math.min(2,(now-last)/16.67); last=now;
+    S.shake=Math.max(0,S.shake-0.04*dt);
+    S.boltFlash=Math.max(0,S.boltFlash-0.028*dt);
+    updateRain(dt);
+    updateWind(dt);
+    updateThunder(dt);
+    if(S.phase==="play"){
+      if(head.x<-100&&pointer.dragging){ head.x=pointer.ax; head.y=pointer.ay; head.px=head.x; head.py=head.y; }
+      const L=lerpAmt();
+      if(pointer.dragging){ head.x+=(pointer.ax-head.x)*Math.min(1,L*dt); head.y+=(pointer.ay-head.y)*Math.min(1,L*dt); }
+      if(pointer.dragging) windForce(dt);
+      head.spin+=(pointer.dragging?0.9:0.25)*dt;
+
+      // drag speed -> effective radius: slow/careful stays precise (base radius) even
+      // fully upgraded; only fast swipes unlock the wider upgraded width.
+      if(pointer.down&&pointer.dragging){
+        const rawSpeed=Math.hypot(pointer.ax-pointer.lax,pointer.ay-pointer.lay)/Math.max(dt,0.001);
+        pointer.speed+=(rawSpeed-pointer.speed)*Math.min(1,0.3*dt);
+      } else pointer.speed=0;
+      pointer.dispRadius+=(effRadiusPx()-pointer.dispRadius)*Math.min(1,0.25*dt);
+      pointer.lax=pointer.ax; pointer.lay=pointer.ay;
+
+      if(pointer.down&&pointer.dragging){
+        rockContact=false;
+        const rad=pointer.dispRadius;
+        const hx0=head.px,hy0=head.py, steps=Math.max(1,Math.hypot(head.x-hx0,head.y-hy0)/(CELL*0.6)|0);
+        for(let s=1;s<=steps;s++){ const t=s/steps; cutAt(hx0*(1-t)+head.x*t,hy0*(1-t)+head.y*t,rad); }
+        cutAt(head.x,head.y,rad);
+        hapticAccum+=dt*16.67;
+        if(cutSinceHaptic>0&&hapticAccum>110){ vibrate(9); hapticAccum=0; cutSinceHaptic=0; }
+        if(rockContact){ const dmgRate=0.5+Math.min(0.9,S.level*0.01); // hazards bite harder on later plots
+          S.trimmerHP=Math.max(0,S.trimmerHP-dmgRate*dt); S.shake=Math.min(1,S.shake+0.4);
+          if(S.trimmerHP<=0) gameOver(); }
+        else S.trimmerHP=Math.min(100,S.trimmerHP+0.25*dt);
+        if(S.phase==="play"){ updateHUD(); checkDone(); }
+      } else { if(!pointer.down) setBuzz(0); S.trimmerHP=Math.min(100,S.trimmerHP+0.25*dt); }
+      head.px=head.x; head.py=head.y;
+      updateTrimmerHUD();
+    }
+    for(let i=particles.length-1;i>=0;i--){ const p=particles[i];
+      p.x+=p.vx*dt;p.y+=p.vy*dt;p.vy+=0.35*dt;p.vx*=0.98;p.rot+=p.vr*dt;p.life-=0.03*dt;
+      if(p.life<=0) particles.splice(i,1); }
+    for(let i=waterEffects.length-1;i>=0;i--){ waterEffects[i].life-=0.028*dt; if(waterEffects[i].life<=0) waterEffects.splice(i,1); }
+    for(let i=gloveEffects.length-1;i>=0;i--){ gloveEffects[i].life-=0.022*dt; if(gloveEffects[i].life<=0) gloveEffects.splice(i,1); }
+    render(); requestAnimationFrame(frame);
+  }
+
+  function render(){
+    const k=S.shake,sx=(Math.random()-.5)*k*6,sy=(Math.random()-.5)*k*6;
+    ctx.save(); ctx.translate(sx,sy);
+    ctx.clearRect(-8,-8,W+16,H+16);
+    ctx.fillStyle="#5a4632"; roundRect(ctx,offX-6,offY-6,cols*CELL+12,rows*CELL+12,12); ctx.fill();
+    ctx.fillStyle="#4c9a3e"; ctx.fillRect(offX,offY,cols*CELL,rows*CELL);
+    if(tilesReady){
+      for(let r=0;r<rows;r++) for(let c=0;c<cols;c++){
+        const idx=r*cols+c, x=offX+c*CELL, y=offY+r*CELL;
+        const key=S.grid?tileFor(idx):"grass_tall_"+seasonFor(S.level||1);
+        const img=TILE[key]; if(img){ ctx.imageSmoothingEnabled=false; ctx.drawImage(img,Math.round(x),Math.round(y),CELL,CELL); }
+        if(!S.grid) continue;
+        const t=S.grid[idx];
+        if(t===6){ ctx.save(); ctx.globalAlpha=0.26; ctx.fillStyle="#8fd3ff"; ctx.fillRect(x,y,CELL,CELL);
+          ctx.globalAlpha=0.95; ctx.fillStyle="#eaffff";
+          ctx.beginPath(); ctx.arc(x+CELL*0.32,y+CELL*0.3,1.7,0,7); ctx.arc(x+CELL*0.7,y+CELL*0.62,1.4,0,7); ctx.fill();
+          ctx.restore(); }
+        else if(t===2&&S.weather==="rain"){ ctx.save(); ctx.globalAlpha=0.14; ctx.fillStyle="#6a93b0"; ctx.fillRect(x,y,CELL,CELL);
+          ctx.restore(); }
+        else if(t===3){ ctx.save(); ctx.globalAlpha=0.4; ctx.fillStyle="#5a2626"; ctx.fillRect(x,y,CELL,CELL); ctx.restore(); }
+        else if(t===9){ ctx.save(); ctx.globalAlpha=0.9; ctx.fillStyle="#ffe08a";
+          ctx.beginPath(); ctx.arc(x+CELL*0.28,y+CELL*0.28,1.6,0,7); ctx.arc(x+CELL*0.68,y+CELL*0.6,1.3,0,7); ctx.fill();
+          ctx.restore(); }
+        else if(t===10){ ctx.save(); ctx.globalAlpha=0.55; ctx.fillStyle="#241a12"; ctx.fillRect(x,y,CELL,CELL);
+          ctx.globalAlpha=0.8; ctx.strokeStyle="#5c4630"; ctx.lineWidth=1.5;
+          ctx.beginPath(); ctx.moveTo(x+CELL*0.2,y+CELL*0.15); ctx.lineTo(x+CELL*0.55,y+CELL*0.5);
+          ctx.lineTo(x+CELL*0.3,y+CELL*0.6); ctx.lineTo(x+CELL*0.75,y+CELL*0.85); ctx.stroke();
+          ctx.restore(); }
+      }
+    }
+    ctx.lineWidth=4; ctx.strokeStyle="#7c5a3a"; roundRect(ctx,offX-6,offY-6,cols*CELL+12,rows*CELL+12,12); ctx.stroke();
+    for(const p of particles){ ctx.save(); ctx.translate(p.x,p.y); ctx.rotate(p.rot);
+      ctx.globalAlpha=Math.max(0,p.life); ctx.strokeStyle=p.col; ctx.lineWidth=2; ctx.lineCap="round";
+      ctx.beginPath(); ctx.moveTo(-p.len/2,0); ctx.lineTo(p.len/2,0); ctx.stroke(); ctx.restore(); }
+    ctx.globalAlpha=1;
+    const canImg=IMG['fx_watercan'];
+    if(canImg) for(const e of waterEffects){
+      const pop=0.8+0.2*Math.min(1,(1-e.life)*8);
+      const size=CELL*1.5*pop;
+      const yFloat=-(1-e.life)*10;
+      ctx.save(); ctx.globalAlpha=Math.max(0,Math.min(1,e.life*1.3));
+      ctx.drawImage(canImg, e.x-size/2, e.y-size/2+yFloat-CELL*0.25, size, size);
+      ctx.restore();
+    }
+    ctx.globalAlpha=1;
+    if(S.phase==="play"&&head.x>-100) drawTrimmer();
+    ctx.restore();
+    if(S.phase==="play"&&S.trimmerHP<45){ const a=(45-S.trimmerHP)/45*0.5;
+      const g=ctx.createRadialGradient(W/2,H/2,Math.min(W,H)*0.3,W/2,H/2,Math.max(W,H)*0.72);
+      g.addColorStop(0,"rgba(255,40,40,0)"); g.addColorStop(1,"rgba(255,30,30,"+a.toFixed(3)+")");
+      ctx.fillStyle=g; ctx.fillRect(0,0,W,H); }
+    drawRain();
+    drawWind();
+    drawStrikes();
+    if(S.boltFlash>0){ ctx.save(); ctx.globalAlpha=Math.min(0.16,S.boltFlash);
+      ctx.fillStyle="#fff6d8"; ctx.fillRect(0,0,W,H); ctx.restore(); }
+  }
+  function drawRain(){
+    if(!rainDrops.length) return;
+    ctx.save();
+    if(S.weather==="rain"&&S.phase==="play"){ ctx.fillStyle="rgba(18,28,38,0.13)"; ctx.fillRect(0,0,W,H); }
+    ctx.lineCap="round";
+    for(const d of rainDrops){
+      const sp=Math.hypot(d.vx,d.vy)||1, ux=d.vx/sp, uy=d.vy/sp;
+      const ex=d.x-ux*d.len, ey=d.y-uy*d.len;
+      const g=ctx.createLinearGradient(ex,ey,d.x,d.y);
+      g.addColorStop(0,"rgba(150,205,255,0)"); g.addColorStop(1,"rgba(195,228,255,0.75)");
+      ctx.strokeStyle=g; ctx.lineWidth=1.8;
+      ctx.beginPath(); ctx.moveTo(ex,ey); ctx.lineTo(d.x,d.y); ctx.stroke();
+    }
+    ctx.restore();
+  }
+  function drawWind(){
+    if(!windParticles.length) return;
+    ctx.save();
+    for(const p of windParticles){
+      ctx.save(); ctx.translate(p.x,p.y); ctx.rotate(p.rot);
+      if(p.kind==="leaf"){ ctx.fillStyle="rgba(126,196,92,0.85)";
+        ctx.beginPath(); ctx.ellipse(0,0,5,2.6,0,0,7); ctx.fill(); }
+      else { ctx.fillStyle="rgba(150,112,72,0.85)"; ctx.fillRect(-4,-1.2,8,2.4); }
+      ctx.restore();
+    }
+    ctx.restore();
+  }
+  function drawStrikes(){
+    if(!strikes.length) return;
+    ctx.save();
+    for(const s of strikes){
+      if(s.phase==="warn"){
+        // A single smooth glow (no repeated strobing) — safer for photosensitive players.
+        const pulse=0.22+0.28*Math.sin(Math.min(1,s.t/WARN_MS)*Math.PI);
+        const col=s.golden?"255,225,120":"255,235,140";
+        ctx.save(); ctx.globalAlpha=Math.max(0,pulse);
+        ctx.fillStyle="rgba("+col+","+(0.3).toFixed(2)+")";
+        ctx.beginPath(); ctx.arc(s.x,s.y,CELL*0.55,0,7); ctx.fill();
+        ctx.lineWidth=2; ctx.strokeStyle="rgba("+col+",0.75)";
+        ctx.strokeRect(offX+s.c*CELL+2,offY+s.r*CELL+2,CELL-4,CELL-4);
+        ctx.restore();
+      } else if(s.phase==="bolt"){
+        ctx.save();
+        ctx.strokeStyle=s.golden?"#fff6c8":"#eaffff";
+        ctx.lineWidth=s.golden?5:4; ctx.lineCap="round"; ctx.lineJoin="round";
+        ctx.shadowColor=s.golden?"#ffe27a":"#bcdcff"; ctx.shadowBlur=14;
+        ctx.beginPath(); ctx.moveTo(s.pts[0].x,s.pts[0].y);
+        for(let i=1;i<s.pts.length;i++) ctx.lineTo(s.pts[i].x,s.pts[i].y);
+        ctx.stroke();
+        ctx.restore();
+      }
+    }
+    ctx.restore();
+  }
+  function drawTrimmer(){
+    const rad=pointer.dispRadius||RADIUS_BASE;
+    if(pointer.dragging){ ctx.save(); ctx.globalAlpha=0.14; ctx.fillStyle="#eaffdf";
+      ctx.beginPath(); ctx.arc(head.x,head.y,rad,0,Math.PI*2); ctx.fill(); ctx.restore(); }
+    ctx.save(); ctx.translate(head.x,head.y); ctx.rotate(head.spin);
+    ctx.strokeStyle="#e9f7c9"; ctx.lineWidth=2.5; ctx.lineCap="round"; ctx.globalAlpha=.85;
+    for(let i=0;i<3;i++){ ctx.rotate(Math.PI*2/3); ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(rad*0.9,0); ctx.stroke(); }
+    ctx.restore();
+    if(pointer.down&&pointer.off>0){ ctx.save(); ctx.globalAlpha=.25; ctx.strokeStyle="#fff"; ctx.lineWidth=2;
+      ctx.setLineDash([3,4]); ctx.beginPath(); ctx.moveTo(pointer.x,pointer.y); ctx.lineTo(head.x,head.y); ctx.stroke(); ctx.restore(); }
+    ctx.save(); ctx.fillStyle=S.trimmerHP<30?"#c73a2a":S.mowerColor; ctx.beginPath(); ctx.arc(head.x,head.y,10,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle="#2b2b2b"; ctx.beginPath(); ctx.arc(head.x,head.y,5,0,Math.PI*2); ctx.fill(); ctx.restore();
+  }
+  function roundRect(c,x,y,w,h,r){ c.beginPath(); c.moveTo(x+r,y); c.arcTo(x+w,y,x+w,y+h,r);
+    c.arcTo(x+w,y+h,x,y+h,r); c.arcTo(x,y+h,x,y,r); c.arcTo(x,y,x+w,y,r); c.closePath(); }
+
+  function checkDone(){ if(S.total-S.cut<=0){
+    for(let i=0;i<S.grid.length;i++){ if(S.grid[i]===0) S.grid[i]=1; } finishPlot(); } }
+  function finishPlot(){
+    S.phase="done"; setBuzz(0); pointer.down=false; pointer.dragging=false; vibrate([12,40,12,40,20]);
+    strikes=[];
+    const perfect=S.flowerHits===0;
+    const shovelAwarded = perfect && S.hadBeds;
+    let line;
+    S.lastEarned=0; S.doubleClaimed=false;
+    const doubleBtn=document.getElementById("doubleAdBtn");
+    if(S.replay){
+      document.getElementById("doneTitle").textContent = shovelAwarded ? "Perfect replay! ✨" : "Replay done";
+      line = `<span style="color:#cfe3cf">Practice run — no coins earned</span>`;
+      if(shovelAwarded){ S.shovels++; line += `<br><b style="color:#d9c3a5">+1 ⛏ shovel</b> — perfect cut!`; }
+      if(S.plotBonus>0) line += `<br><span style="opacity:.7">(digging/watering practiced, no payout on replays)</span>`;
+      doubleBtn.classList.add("hidden");
+    } else {
+      const base=40+S.level*10;
+      const care=(S.level>=2)?(perfect?30:Math.max(0,30-10*S.flowerHits)):0;
+      const earned=base+care; S.coins+=earned; S.lastEarned=earned;
+      if(shovelAwarded) S.shovels++;
+      if(S.level>=S.maxLevel) S.maxLevel=S.level+1;
+      document.getElementById("doneTitle").textContent=(S.level>=2&&perfect)?"Spotless! ✨":"Plot done";
+      line=`+<b>${earned}</b> coins &nbsp;·&nbsp; base ${base}`;
+      if(S.level>=2) line+=` &nbsp;·&nbsp; garden ${perfect?"perfect (+30)":`nicked ×${S.flowerHits}`}`;
+      if(S.plotBonus>0) line+=`<br><b style="color:var(--coin)">+${S.plotBonus}</b> from debris, digging & watering`;
+      if(shovelAwarded) line+=`<br><b style="color:#d9c3a5">+1 ⛏ shovel</b> — perfect cut!`;
+      doubleBtn.classList.remove("hidden");
+      document.getElementById("doubleAdAmt").textContent=`+${earned} coins`;
+      doubleBtn.disabled=false;
+    }
+    document.getElementById("earnLine").innerHTML=line;
+    renderShop(); updateHUD(); show("donePanel",true);
+    const nb=document.getElementById("nextBtn");
+    if(S.replay){ nb.textContent="Replay again ↻"; }
+    else { nb.textContent="Next plot →"; }
+    saveGame();
+  }
+  function gameOver(){ S.phase="over"; setBuzz(0); pointer.down=false; pointer.dragging=false; S.shake=1;
+    strikes=[];
+    vibrate([30,60,30,60,140]);
+    document.getElementById("overStats").innerHTML=`Reached <b>plot ${S.level}</b> &nbsp;·&nbsp; <b>${S.coins}</b> coins banked (kept)`;
+    saveGame();
+    show("overPanel",true); }
+
+  const SHOVEL_COST=25;
+  function renderShopUpgrades(){ const shop=document.getElementById("shopUpgrades"); shop.innerHTML="";
+    const items=[{key:"radius",name:"Wider cutting head",desc:"Mow more per pass",max:RADIUS_MAX,cost:60+S.up.radius*60},
+      {key:"turbo",name:"Turbo motor",desc:"Head keeps up with fast swipes",max:TURBO_MAX,cost:50+S.up.turbo*50}];
+    for(const it of items){ const lvl=S.up[it.key],maxed=lvl>=it.max,canBuy=!maxed&&S.coins>=it.cost;
+      const row=document.createElement("div"); row.className="up";
+      row.innerHTML=`<div class="t"><b>${it.name}</b><span>${it.desc}</span>
+        <div class="lvl">${"●".repeat(lvl)}${"○".repeat(it.max-lvl)}</div></div>`;
+      const btn=document.createElement("button"); btn.className="btn small"+(canBuy?"":" ghost");
+      btn.textContent=maxed?"Maxed":`${it.cost}c`; btn.disabled=!canBuy;
+      btn.onclick=()=>{ if(S.coins>=it.cost){ S.coins-=it.cost; S.up[it.key]++; updateHUD(); renderShopUpgrades(); vibrate(15); saveGame(); } };
+      row.appendChild(btn); shop.appendChild(row); }
+    // work gloves — one-time purchase, required to clear debris
+    const grow=document.createElement("div"); grow.className="up";
+    grow.innerHTML=`<div class="t"><b>Work gloves</b><span>Debris hurts the trimmer until you own these — then it's safe to clear</span></div>`;
+    const gbtn=document.createElement("button");
+    const gCost=90, gCanBuy=!S.hasGloves&&S.coins>=gCost;
+    gbtn.className="btn small"+(S.hasGloves?" ghost":(gCanBuy?"":" ghost"));
+    gbtn.textContent=S.hasGloves?"Owned":`${gCost}c`; gbtn.disabled=S.hasGloves||!gCanBuy;
+    gbtn.onclick=()=>{ if(!S.hasGloves&&S.coins>=gCost){ S.coins-=gCost; S.hasGloves=true; updateHUD(); renderShopUpgrades(); vibrate(15); saveGame(); } };
+    grow.appendChild(gbtn); shop.appendChild(grow);
+    // buy a shovel directly — repeatable, no cap, a real coin sink once upgrades are maxed
+    const srow=document.createElement("div"); srow.className="up";
+    srow.innerHTML=`<div class="t"><b>Shovel</b><span>Dig out a rock on the spot</span></div>`;
+    const sbtn=document.createElement("button"); const sCanBuy=S.coins>=SHOVEL_COST;
+    sbtn.className="btn small"+(sCanBuy?"":" ghost"); sbtn.textContent=`${SHOVEL_COST}c`; sbtn.disabled=!sCanBuy;
+    sbtn.onclick=()=>{ if(S.coins>=SHOVEL_COST){ S.coins-=SHOVEL_COST; S.shovels++; updateHUD(); renderShopUpgrades(); vibrate(15); saveGame(); } };
+    srow.appendChild(sbtn); shop.appendChild(srow);
+  }
+  function renderShopCosmetics(){ const shop=document.getElementById("shopCosmetics"); shop.innerHTML="";
+    const crow=document.createElement("div"); crow.className="up";
+    const swatches=MOWER_COLORS.map(c=>`<button class="swatch${c===S.mowerColor?" sel":""}" data-c="${c}" style="background:${c}"></button>`).join("");
+    crow.innerHTML=`<div class="t"><b>Mower color</b><span>Personalize your trimmer</span></div>
+      <div class="swrow">${swatches}</div>`;
+    crow.querySelectorAll(".swatch").forEach(sw=>{ sw.onclick=()=>{ S.mowerColor=sw.dataset.c;
+      crow.querySelectorAll(".swatch").forEach(x=>x.classList.remove("sel")); sw.classList.add("sel");
+      vibrate(10); saveGame(); }; });
+    shop.appendChild(crow);
+  }
+  function renderShop(){ renderShopUpgrades(); renderShopCosmetics(); }
+
+  function updateHUD(){ const season=seasonFor(S.level);
+    document.getElementById("plot").textContent="Plot "+S.level+" "+SEASON_EMOJI[season]+
+      (S.weather==="rain"?" 🌧️":"")+(S.thunder?" ⚡":"")+(S.replay?" (replay)":"");
+    document.getElementById("coins").textContent=S.coins;
+    const pct=S.total?Math.min(100,Math.round(S.cut/S.total*100)):0;
+    document.getElementById("bar").style.width=pct+"%";
+    const sh=document.getElementById("shovels");
+    if(S.shovels>0||S.plotRocks){ sh.style.display="flex"; sh.textContent="⛏ "+S.shovels; } else sh.style.display="none";
+    document.getElementById("plotsBtn").style.display=(S.phase==="play")?"inline-block":"none";
+    document.getElementById("shopBtn").style.display=(S.phase==="play")?"inline-block":"none";
+    document.getElementById("adShovelBtn").style.display=
+      (S.phase==="play"&&S.shovels<=0&&S.plotRocks)?"inline-block":"none";
+    const wt=document.getElementById("windTag");
+    if(S.phase==="play"&&S.weather==="wind"){ wt.style.display="flex";
+      const deg=S.windDir*180/Math.PI;
+      document.getElementById("windArrow").style.transform="rotate("+deg+"deg)";
+    } else wt.style.display="none";
+    updateTrimmerHUD(); }
+  function updateTrimmerHUD(){ const tr=document.getElementById("trimmer");
+    if(S.phase==="play"&&S.trimmerHP<100){ tr.style.display="flex"; tr.textContent="🔧 "+Math.ceil(S.trimmerHP)+"%";
+      tr.style.color=S.trimmerHP<30?"#ff6b6b":(S.trimmerHP<60?"#ffcf4a":"#cfe3cf"); } else tr.style.display="none"; }
+  function penaltyFlash(){ const f=document.getElementById("flash");
+    f.style.transition="none"; f.style.opacity="0.35";
+    requestAnimationFrame(()=>{ f.style.transition="opacity .4s"; f.style.opacity="0"; }); }
+
+  let actx=null,engineGain=null,engineFilter=null;
+  function initAudio(){ if(actx) return; try{ actx=new (window.AudioContext||window.webkitAudioContext)();
+    engineFilter=actx.createBiquadFilter(); engineFilter.type="lowpass"; engineFilter.frequency.value=600;
+    engineGain=actx.createGain(); engineGain.gain.value=0;
+    const o1=actx.createOscillator(); o1.type="sawtooth"; o1.frequency.value=62;
+    const o2=actx.createOscillator(); o2.type="sawtooth"; o2.frequency.value=94;
+    o1.connect(engineFilter);o2.connect(engineFilter);engineFilter.connect(engineGain);engineGain.connect(actx.destination);
+    o1.start();o2.start(); }catch(e){ actx=null; } }
+  function setBuzz(t){ if(!actx||!engineGain) return; engineGain.gain.setTargetAtTime(t,actx.currentTime,0.08);
+    engineFilter.frequency.setTargetAtTime(t>0.09?1100:600,actx.currentTime,0.1); }
+  function buzzBump(bad){ if(!actx) return; setBuzz(bad?0.05:0.12); }
+  function vibrate(p){ try{ if(navigator.vibrate) navigator.vibrate(p);}catch(e){} }
+
+  const toLocal=e=>{ const r=canvas.getBoundingClientRect(); return {x:e.clientX-r.left,y:e.clientY-r.top}; };
+  canvas.addEventListener("pointerdown",e=>{ if(S.phase!=="play") return;
+    initAudio(); if(actx&&actx.state==="suspended") actx.resume();
+    const p=toLocal(e),off=e.pointerType==="touch"?TOUCH_OFFSET:0;
+    pointer.x=p.x;pointer.y=p.y;pointer.off=off;pointer.ax=p.x;pointer.ay=p.y-off;
+    pointer.lax=pointer.ax;pointer.lay=pointer.ay;pointer.speed=0;pointer.dispRadius=RADIUS_BASE;
+    pointer.down=true;pointer.dragging=false;pointer.downX=p.x;pointer.downY=p.y;
+    canvas.setPointerCapture(e.pointerId); document.getElementById("hint").style.opacity="0"; setBuzz(0.08); });
+  canvas.addEventListener("pointermove",e=>{ const p=toLocal(e);
+    pointer.x=p.x;pointer.y=p.y;pointer.ax=p.x;pointer.ay=p.y-(pointer.off||0);
+    if(pointer.down&&!pointer.dragging&&Math.hypot(p.x-pointer.downX,p.y-pointer.downY)>8){
+      pointer.dragging=true;
+      head.x=pointer.ax; head.y=pointer.ay; head.px=head.x; head.py=head.y; } });
+  const up=()=>{ if(pointer.down&&!pointer.dragging) handleTap(pointer.x,pointer.y);
+    pointer.down=false; pointer.dragging=false; setBuzz(0); };
+  canvas.addEventListener("pointerup",up); canvas.addEventListener("pointercancel",up);
+
+  function show(id,on){ document.getElementById(id).classList.toggle("hidden",!on); }
+
+  function applySave(d){
+    S.coins=d.coins; S.maxLevel=d.maxLevel||1; S.up.radius=d.upR||0; S.up.turbo=d.upT||0;
+    S.shovels=(typeof d.shovels==="number")?d.shovels:1; S.mowerColor=d.color||"#e8503a";
+    S.hasGloves=!!d.gloves;
+  }
+
+  function beginPlay(level, replay){
+    S.phase="play"; S.level=level; S.replay=replay; S.trimmerHP=100; S.shake=0;
+    particles.length=0; head.x=-999;
+    initAudio(); if(actx&&actx.state==="suspended") actx.resume();
+    show("startPanel",false); show("donePanel",false); show("selectPanel",false); show("overPanel",false); show("shopPanel",false);
+    newPlot(); updateHUD();
+  }
+
+  function startRun(){ // brand-new game
+    if(!tilesReady){ startPending=true; document.getElementById("startLoadingLabel").classList.remove("hidden"); return; }
+    S.coins=0; S.shovels=1; S.up.radius=0; S.up.turbo=0; S.maxLevel=1; S.hasGloves=false;
+    beginPlay(1,false);
+  }
+  function continueAfterBreak(){ // trimmer broke: keep banked coins/upgrades/shovels, restart at plot 1
+    beginPlay(1, S.maxLevel>1);   // if plot 1 was already unlocked/completed, this is a replay (no coin payout)
+  }
+
+  let selectReturnPanel=null;
+  function openPlotSelect(){
+    selectReturnPanel = (S.phase==="done") ? "donePanel" : (S.phase==="play") ? null : "startPanel";
+    const list=document.getElementById("plotList"); list.innerHTML="";
+    for(let n=1;n<=S.maxLevel;n++){
+      const row=document.createElement("div");
+      const isFrontier = n===S.maxLevel;
+      row.className="plotrow"+(isFrontier?" frontier":"");
+      row.innerHTML = `<span>Plot ${n}</span><small>${isFrontier?"New — earns coins":"Replay — practice, no coins"}</small>`;
+      row.onclick=()=>{ beginPlay(n, !isFrontier); };
+      list.appendChild(row);
+    }
+    show("startPanel",false); show("donePanel",false); show("overPanel",false); show("shopPanel",false); show("selectPanel",true);
+  }
+
+  let shopReturnPanel=null;
+  function openShop(){
+    shopReturnPanel = (S.phase==="done") ? "donePanel" : (S.phase==="play") ? null : "startPanel";
+    renderShopUpgrades(); renderShopCosmetics();
+    show("startPanel",false); show("donePanel",false); show("selectPanel",false); show("overPanel",false);
+    show("shopPanel",true);
+  }
+  function switchShopTab(tab){
+    const upBtn=document.getElementById("tabUpgrades"), coBtn=document.getElementById("tabCosmetics");
+    const upPane=document.getElementById("shopUpgrades"), coPane=document.getElementById("shopCosmetics");
+    upBtn.classList.toggle("active", tab==="upgrades"); upBtn.classList.toggle("ghost", tab!=="upgrades");
+    coBtn.classList.toggle("active", tab==="cosmetics"); coBtn.classList.toggle("ghost", tab!=="cosmetics");
+    upPane.classList.toggle("hidden", tab!=="upgrades");
+    coPane.classList.toggle("hidden", tab!=="cosmetics");
+  }
+  document.getElementById("tabUpgrades").onclick=()=>switchShopTab("upgrades");
+  document.getElementById("tabCosmetics").onclick=()=>switchShopTab("cosmetics");
+  document.getElementById("shopBtn").onclick=()=>openShop();
+  document.getElementById("openShopBtn").onclick=()=>openShop();
+  document.getElementById("shopBackBtn").onclick=()=>{
+    show("shopPanel",false);
+    if(shopReturnPanel) show(shopReturnPanel,true);   // else: mid-run — just resume the game underneath
+  };
+
+  document.getElementById("startBtn").onclick=()=>{ startRun();
+    if(startPending){ show("startPanel",true); } };
+  document.getElementById("continueBtn").onclick=()=>{ const d=loadGame(); if(d) applySave(d); openPlotSelect(); };
+  document.getElementById("newGameBtn").onclick=()=>{
+    if(confirm("Start a new game? This will erase your saved coins, upgrades and unlocked plots.")){
+      clearSave(); startRun();
+    } };
+  document.getElementById("restartBtn").onclick=()=>{ continueAfterBreak(); };
+  document.getElementById("nextBtn").onclick=()=>{
+    if(S.replay){ beginPlay(S.level, true); }              // replay same plot again
+    else{ beginPlay(S.level+1, false); }                    // advance the frontier
+  };
+  document.getElementById("choosePlotBtn").onclick=()=>{ openPlotSelect(); };
+  document.getElementById("plotsBtn").onclick=()=>{ openPlotSelect(); };
+  document.getElementById("selectBackBtn").onclick=()=>{
+    show("selectPanel",false);
+    if(selectReturnPanel) show(selectReturnPanel,true);   // else: mid-run — just resume the game underneath
+  };
+
+  // ---- opt-in rewarded ad (mock) ----
+  // Mirrors real rewarded-video SDK behavior: the reward only fires after the
+  // watch completes (onUserEarnedReward). Closing early forfeits it — same
+  // contract you'll have with the real AdMob rewarded unit later.
+  let adTimer=null, adPendingReward=null, adReturnPanel=null;
+  function playRewardedAd(seconds, rewardLabel, onReward, returnPanelId){
+    adPendingReward=onReward; adReturnPanel=returnPanelId||null;
+    const countEl=document.getElementById("adCount"), subEl=document.getElementById("adSub");
+    let n=seconds; countEl.textContent=n;
+    subEl.textContent=rewardLabel;
+    show("adPlayPanel",true);
+    clearInterval(adTimer);
+    adTimer=setInterval(()=>{
+      n--; countEl.textContent=Math.max(n,0);
+      if(n<=0){ clearInterval(adTimer); adTimer=null;
+        subEl.textContent="Reward earned! ✔";
+        const reward=adPendingReward; adPendingReward=null;
+        setTimeout(()=>{ show("adPlayPanel",false); if(adReturnPanel) show(adReturnPanel,true);
+          if(reward) reward(); }, 700);
+      }
+    },1000);
+  }
+  document.getElementById("adSkipBtn").onclick=()=>{
+    clearInterval(adTimer); adTimer=null; adPendingReward=null;
+    show("adPlayPanel",false); if(adReturnPanel) show(adReturnPanel,true);
+  };
+  document.getElementById("doubleAdBtn").onclick=()=>{
+    if(S.doubleClaimed||S.lastEarned<=0) return;
+    S.doubleClaimed=true;
+    const amt=S.lastEarned;
+    playRewardedAd(5, `Watching ad — +${amt} coins when it finishes`, ()=>{
+      S.coins+=amt; updateHUD(); saveGame();
+      document.getElementById("doubleAdBtn").classList.add("hidden");
+      const line=document.getElementById("earnLine");
+      line.innerHTML += `<br><b style="color:var(--coin)">+${amt}</b> bonus from ad — doubled!`;
+      vibrate([10,30,10,30,10]);
+    }, "donePanel");
+  };
+  document.getElementById("adShovelBtn").onclick=()=>{
+    playRewardedAd(5, "Watching ad — +1 shovel when it finishes", ()=>{
+      S.shovels++; updateHUD(); saveGame(); vibrate([10,30,10]);
+    }, null); // null: resumes straight back into gameplay, no panel to reopen
+  };
+
+  window.addEventListener("resize",()=>{ clearTimeout(window.__rt); window.__rt=setTimeout(resize,150); });
+
+  // --- music: sync the toggle, and start on the first user gesture ---
+  (function(){
+    const btn=document.getElementById("musicBtn");
+    const sync=()=>{ btn.textContent=Music.isMuted()?"🔇":"🔊"; };
+    sync();
+    btn.onclick=()=>{ Music.toggle(); sync(); };
+    window.addEventListener("pointerdown", ()=>{ Music.start(); }, { once:true });
+  })();
+
+  document.getElementById("creditsBtn").onclick=()=>show("creditsPanel",true);
+  document.getElementById("creditsBackBtn").onclick=()=>show("creditsPanel",false);
+  resize();
+  let hasSave=false;
+  preload(()=>{ buildTileCache();
+    document.getElementById("startLoadingLabel").classList.add("hidden");
+    // show Continue/New game if a save exists; keep Start as the primary action otherwise
+    const d=loadGame();
+    if(d){ hasSave=true; applySave(d); updateHUD();
+      document.getElementById("startBtn").classList.add("hidden");
+      document.getElementById("continueBtn").classList.remove("hidden");
+      document.getElementById("newGameBtn").classList.remove("hidden");
+    }
+    if(startPending){ startPending=false; if(!hasSave) startRun(); }
+  });
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
