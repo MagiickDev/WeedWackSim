@@ -41,7 +41,8 @@
   .btn.small{padding:10px 14px;font-size:13px;} .btn.ghost{background:#ffffff14;color:#eaf7ea;box-shadow:none;border:1px solid #ffffff2a;}
   .btn[disabled]{opacity:.5;}
   .earn{font-size:16px;line-height:1.55} .earn b{color:var(--coin)}
-  .shop{display:flex;flex-direction:column;gap:10px;width:100%;max-width:320px}
+  .shop{display:flex;flex-direction:column;gap:10px;width:100%;max-width:320px;max-height:calc(100dvh - 300px);overflow-y:auto;overscroll-behavior:contain;padding-right:2px;}
+  #shopPanel{padding-bottom:70px;}
   .up{display:flex;align-items:center;justify-content:space-between;gap:10px;background:#ffffff0f;
     border:1px solid #ffffff1c;border-radius:14px;padding:10px 12px;}
   .up .t{text-align:left} .up .t b{font-size:14px} .up .t span{display:block;font-size:11px;opacity:.7;margin-top:2px}
@@ -114,6 +115,7 @@
     <div id="barwrap"><div id="bar"></div></div>
     <div id="trimmer" style="display:none">🔧 100%</div>
     <div id="shovels" style="display:none">⛏ 0</div>
+    <div id="glovesHud" style="display:none">🧤 0</div>
     <div id="windTag" style="display:none">💨 <span id="windArrow">➤</span></div>
     <button class="hudbtn adbtn" id="adShovelBtn" style="display:none">▶ +1⛏</button>
     <div id="coins">0</div>
@@ -207,7 +209,7 @@ const TILE_SRC = {"grass_short": "assets/grass_short.png", "grass_tall": "assets
   const S={ phase:"menu",level:1,coins:0, grid:null,cutLvl:null,total:0,cut:0,
     flowerHits:0,plotBonus:0,wateredBeds:0, shovels:1,plotRocks:false,plotBushes:false,plotDebris:false, trimmerHP:100,shake:0,
     up:{radius:0,turbo:0}, maxLevel:1, replay:false, hadBeds:false, mowerColor:"#ed7705", ownedSkins:[], skin:null,
-    lastEarned:0, doubleClaimed:false, hasGloves:false,
+    lastEarned:0, doubleClaimed:false, gloves:0, boughtShovels:false, boughtGloves:false,
     weather:"clear", grassMask:null, rainAccum:0, windDir:0, windPhase:0,
     thunder:false, thunderAccum:0, boltFlash:0 };
   const MOWER_COLORS=["#ed7705","#6ab210","#f5aa05","#5996b9","#909899","#f8f8f5"];
@@ -252,7 +254,7 @@ const TILE_SRC = {"grass_short": "assets/grass_short.png", "grass_tall": "assets
   const SAVE_KEY="trim_save_v1";
   function saveGame(){ try{ localStorage.setItem(SAVE_KEY, JSON.stringify({
     coins:S.coins, maxLevel:S.maxLevel, upR:S.up.radius, upT:S.up.turbo,
-    shovels:S.shovels, color:S.mowerColor, gloves:S.hasGloves, skins:S.ownedSkins, skin:S.skin })); }catch(e){} }
+    shovels:S.shovels, color:S.mowerColor, gloves:S.gloves, skins:S.ownedSkins, skin:S.skin })); }catch(e){} }
   function loadGame(){ try{ const raw=localStorage.getItem(SAVE_KEY); if(!raw) return null;
     const d=JSON.parse(raw); if(typeof d.coins!=="number") return null; return d; }catch(e){ return null; } }
   function clearSave(){ try{ localStorage.removeItem(SAVE_KEY); }catch(e){} }
@@ -399,7 +401,7 @@ const TILE_SRC = {"grass_short": "assets/grass_short.png", "grass_tall": "assets
     if(S.level>=2) h+= S.weather==="rain" ? " · flowers already getting rain — tap to top off 💧" : " · tap flowers to water 💧";
     if(S.plotRocks) h+=" · tap rocks to dig ⛏";
     if(S.plotBushes) h+=" · tap bushes to trim ✂️";
-    if(S.plotDebris&&!S.hasGloves) h+=" · debris hurts the trimmer — buy gloves 🧤";
+    if(S.plotDebris&&S.gloves<=0) h+=" · debris hurts the trimmer — buy gloves 🧤";
     if(S.weather==="rain") h+=" · rain regrows mowed grass — work fast! 🌧️";
     if(S.weather==="wind") h+=" · gusts push the trimmer off course — steer against it 💨";
     if(S.thunder) h+=" · lightning strikes nearby — dodge the glow! ⚡";
@@ -637,7 +639,8 @@ const TILE_SRC = {"grass_short": "assets/grass_short.png", "grass_tall": "assets
       head.spin+=0.6; buzzBump(false); vibrate(6);
       if(S.phase==="play"){ updateHUD(); checkDone(); }
     } }
-  function clearDebris(cell){ if(!S.hasGloves){ vibrate(4); flashGlovesNeeded(); return; }
+  function clearDebris(cell){ if(S.gloves<=0){ vibrate(4); flashGlovesNeeded(); return; }
+    S.gloves--;
     S.grid[cell.idx]=1; S.cutLvl[cell.idx]=CUTMAX; S.total++; S.cut++;
     if(!S.replay){ const b=8; S.coins+=b; S.plotBonus+=b; }
     const cx=offX+cell.c*CELL+CELL/2,cy=offY+cell.r*CELL+CELL/2;
@@ -912,6 +915,7 @@ const TILE_SRC = {"grass_short": "assets/grass_short.png", "grass_tall": "assets
     show("overPanel",true); }
 
   const SHOVEL_COST=25;
+  const BUNDLE_COST=500, BUNDLE_QTY=5;   // shovels/gloves: 5 for 500, once per plot
   function renderShopUpgrades(){ const shop=document.getElementById("shopUpgrades"); shop.innerHTML="";
     const items=[{key:"radius",name:"Wider cutting head",desc:"Mow more per pass",max:RADIUS_MAX,cost:60+S.up.radius*60},
       {key:"turbo",name:"Turbo motor",desc:"Head keeps up with fast swipes",max:TURBO_MAX,cost:50+S.up.turbo*50}];
@@ -923,21 +927,21 @@ const TILE_SRC = {"grass_short": "assets/grass_short.png", "grass_tall": "assets
       btn.textContent=maxed?"Maxed":`${it.cost}c`; btn.disabled=!canBuy;
       btn.onclick=()=>{ if(S.coins>=it.cost){ S.coins-=it.cost; S.up[it.key]++; updateHUD(); renderShopUpgrades(); vibrate(15); saveGame(); } };
       row.appendChild(btn); shop.appendChild(row); }
-    // work gloves — one-time purchase, required to clear debris
+    // work gloves — consumable bundle, one purchase per completed plot
     const grow=document.createElement("div"); grow.className="up";
-    grow.innerHTML=`<div class="t"><b>Work gloves</b><span>Debris hurts the trimmer until you own these — then it's safe to clear</span></div>`;
+    grow.innerHTML=`<div class="t"><b>Work gloves ×${BUNDLE_QTY}</b><span>Tap debris to clear it safely — one glove each. You have ${S.gloves}</span></div>`;
     const gbtn=document.createElement("button");
-    const gCost=90, gCanBuy=!S.hasGloves&&S.coins>=gCost;
-    gbtn.className="btn small"+(S.hasGloves?" ghost":(gCanBuy?"":" ghost"));
-    gbtn.textContent=S.hasGloves?"Owned":`${gCost}c`; gbtn.disabled=S.hasGloves||!gCanBuy;
-    gbtn.onclick=()=>{ if(!S.hasGloves&&S.coins>=gCost){ S.coins-=gCost; S.hasGloves=true; updateHUD(); renderShopUpgrades(); vibrate(15); saveGame(); } };
+    const gCanBuy=!S.boughtGloves&&S.coins>=BUNDLE_COST;
+    gbtn.className="btn small"+(gCanBuy?"":" ghost");
+    gbtn.textContent=S.boughtGloves?"Bought":`${BUNDLE_COST}c`; gbtn.disabled=!gCanBuy;
+    gbtn.onclick=()=>{ if(!S.boughtGloves&&S.coins>=BUNDLE_COST){ S.coins-=BUNDLE_COST; S.gloves+=BUNDLE_QTY; S.boughtGloves=true; updateHUD(); renderShopUpgrades(); vibrate(15); saveGame(); } };
     grow.appendChild(gbtn); shop.appendChild(grow);
-    // buy a shovel directly — repeatable, no cap, a real coin sink once upgrades are maxed
+    // shovels — consumable bundle, one purchase per completed plot
     const srow=document.createElement("div"); srow.className="up";
-    srow.innerHTML=`<div class="t"><b>Shovel</b><span>Dig out a rock on the spot</span></div>`;
-    const sbtn=document.createElement("button"); const sCanBuy=S.coins>=SHOVEL_COST;
-    sbtn.className="btn small"+(sCanBuy?"":" ghost"); sbtn.textContent=`${SHOVEL_COST}c`; sbtn.disabled=!sCanBuy;
-    sbtn.onclick=()=>{ if(S.coins>=SHOVEL_COST){ S.coins-=SHOVEL_COST; S.shovels++; updateHUD(); renderShopUpgrades(); vibrate(15); saveGame(); } };
+    srow.innerHTML=`<div class="t"><b>Shovels ×${BUNDLE_QTY}</b><span>Tap a rock to dig it out — one shovel each. You have ${S.shovels}</span></div>`;
+    const sbtn=document.createElement("button"); const sCanBuy=!S.boughtShovels&&S.coins>=BUNDLE_COST;
+    sbtn.className="btn small"+(sCanBuy?"":" ghost"); sbtn.textContent=S.boughtShovels?"Bought":`${BUNDLE_COST}c`; sbtn.disabled=!sCanBuy;
+    sbtn.onclick=()=>{ if(!S.boughtShovels&&S.coins>=BUNDLE_COST){ S.coins-=BUNDLE_COST; S.shovels+=BUNDLE_QTY; S.boughtShovels=true; updateHUD(); renderShopUpgrades(); vibrate(15); saveGame(); } };
     srow.appendChild(sbtn); shop.appendChild(srow);
   }
   function renderShopCosmetics(){ const shop=document.getElementById("shopCosmetics"); shop.innerHTML="";
@@ -975,6 +979,8 @@ const TILE_SRC = {"grass_short": "assets/grass_short.png", "grass_tall": "assets
     document.getElementById("bar").style.width=pct+"%";
     const sh=document.getElementById("shovels");
     if(S.shovels>0||S.plotRocks){ sh.style.display="flex"; sh.textContent="⛏ "+S.shovels; } else sh.style.display="none";
+    const gl=document.getElementById("glovesHud");
+    if(S.gloves>0||S.plotDebris){ gl.style.display="flex"; gl.textContent="🧤 "+S.gloves; } else gl.style.display="none";
     document.getElementById("plotsBtn").style.display=(S.phase==="play")?"inline-block":"none";
     document.getElementById("shopBtn").style.display=(S.phase==="play")?"inline-block":"none";
     document.getElementById("adShovelBtn").style.display=
@@ -1027,11 +1033,12 @@ const TILE_SRC = {"grass_short": "assets/grass_short.png", "grass_tall": "assets
   function applySave(d){
     S.coins=d.coins; S.maxLevel=d.maxLevel||1; S.up.radius=d.upR||0; S.up.turbo=d.upT||0;
     S.shovels=(typeof d.shovels==="number")?d.shovels:1; S.mowerColor=d.color||"#e8503a";
-    S.hasGloves=!!d.gloves; S.ownedSkins=Array.isArray(d.skins)?d.skins:[]; S.skin=d.skin||null;
+    S.gloves=(typeof d.gloves==="number")?d.gloves:(d.gloves?BUNDLE_QTY:0); S.ownedSkins=Array.isArray(d.skins)?d.skins:[]; S.skin=d.skin||null;
   }
 
   function beginPlay(level, replay){
     S.phase="play"; S.level=level; S.replay=replay; S.trimmerHP=100; S.shake=0;
+    S.boughtShovels=false; S.boughtGloves=false;   // one bundle purchase each per plot
     particles.length=0; head.x=-999;
     initAudio(); if(actx&&actx.state==="suspended") actx.resume();
     show("startPanel",false); show("donePanel",false); show("selectPanel",false); show("overPanel",false); show("shopPanel",false);
@@ -1040,7 +1047,7 @@ const TILE_SRC = {"grass_short": "assets/grass_short.png", "grass_tall": "assets
 
   function startRun(){ // brand-new game
     if(!tilesReady){ startPending=true; document.getElementById("startLoadingLabel").classList.remove("hidden"); return; }
-    S.coins=0; S.shovels=1; S.up.radius=0; S.up.turbo=0; S.maxLevel=1; S.hasGloves=false;
+    S.coins=0; S.shovels=1; S.up.radius=0; S.up.turbo=0; S.maxLevel=1; S.gloves=0;
     beginPlay(1,false);
   }
   function continueAfterBreak(){ // trimmer broke: keep banked coins/upgrades/shovels, restart at plot 1
