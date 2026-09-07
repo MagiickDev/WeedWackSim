@@ -11,7 +11,8 @@
   *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
   html,body{margin:0;height:100%;overflow:hidden;background:#0c130d;
     font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;color:#eaf7ea;user-select:none;}
-  #wrap{position:fixed;inset:0;}
+  #wrap{position:fixed;top:0;bottom:0;left:50%;transform:translateX(-50%);
+    width:min(100vw,60vh,520px);box-shadow:0 0 0 1px #ffffff12,0 0 60px #0007;}
   canvas{position:absolute;inset:0;width:100%;height:100%;touch-action:none;display:block;image-rendering:pixelated;}
   #hud{position:absolute;top:0;left:0;right:0;padding:10px 12px;display:flex;align-items:center;gap:8px;
     pointer-events:none;background:linear-gradient(#0c130dcc,transparent);}
@@ -51,6 +52,7 @@
   .swrow{display:flex;gap:8px;}
   .swatch{width:26px;height:26px;border-radius:50%;border:2px solid #ffffff33;cursor:pointer;padding:0;}
   .swatch.sel{border-color:#fff;box-shadow:0 0 0 2px #ffffff55;}
+  .mowerthumb{width:46px;height:46px;flex:0 0 auto;background-size:600% auto;background-position:left center;background-repeat:no-repeat;border-radius:8px;background-color:#0d150e;}
   .plotlist{display:flex;flex-direction:column;gap:8px;width:100%;max-width:320px;
     max-height:52vh;overflow-y:auto;padding-right:2px;}
   .plotrow{display:flex;align-items:center;justify-content:space-between;gap:10px;
@@ -204,11 +206,23 @@ const TILE_SRC = {"grass_short": "assets/grass_short.png", "grass_tall": "assets
   // types: 0 grass,1 cut,2 flower,3 flowerHit,4 rock,5 empty,6 watered,7 debris,10 scorch
   const S={ phase:"menu",level:1,coins:0, grid:null,cutLvl:null,total:0,cut:0,
     flowerHits:0,plotBonus:0,wateredBeds:0, shovels:1,plotRocks:false,plotBushes:false,plotDebris:false, trimmerHP:100,shake:0,
-    up:{radius:0,turbo:0}, maxLevel:1, replay:false, hadBeds:false, mowerColor:"#ed7705",
+    up:{radius:0,turbo:0}, maxLevel:1, replay:false, hadBeds:false, mowerColor:"#ed7705", ownedSkins:[], skin:null,
     lastEarned:0, doubleClaimed:false, hasGloves:false,
     weather:"clear", grassMask:null, rainAccum:0, windDir:0, windPhase:0,
     thunder:false, thunderAccum:0, boltFlash:0 };
   const MOWER_COLORS=["#ed7705","#6ab210","#f5aa05","#5996b9","#909899","#f8f8f5"];
+  // ---- animated mower skins (Cosmetics) --------------------------------------
+  const MOWER_FRAMES=6;
+  const MOWER_SKINS=[
+    {k:"buzzsaw",n:"Buzzsaw",c:500},     {k:"sunflower",n:"Sunflower",c:500},
+    {k:"blossom",n:"Blossom",c:600},     {k:"crystal",n:"Crystal",c:800},
+    {k:"nature",n:"Nature",c:900},       {k:"frost",n:"Frost",c:1000},
+    {k:"butterfly",n:"Butterfly",c:1200},{k:"sakura",n:"Sakura",c:1200},
+    {k:"galaxy",n:"Galaxy",c:1500},      {k:"inferno",n:"Inferno",c:1500},
+  ];
+  const skinImg={};
+  MOWER_SKINS.forEach(s=>{ const im=new Image(); im.onload=()=>{ skinImg[s.k]=im; }; im.src="assets/mowers/"+s.k+".png"; });
+  let skinAnim={t:0,frame:0};
   let rainDrops=[], windParticles=[], strikes=[];
 
   // Seasons cycle as you progress plots — every SEASON_LEVELS plots the palette shifts.
@@ -238,7 +252,7 @@ const TILE_SRC = {"grass_short": "assets/grass_short.png", "grass_tall": "assets
   const SAVE_KEY="trim_save_v1";
   function saveGame(){ try{ localStorage.setItem(SAVE_KEY, JSON.stringify({
     coins:S.coins, maxLevel:S.maxLevel, upR:S.up.radius, upT:S.up.turbo,
-    shovels:S.shovels, color:S.mowerColor, gloves:S.hasGloves })); }catch(e){} }
+    shovels:S.shovels, color:S.mowerColor, gloves:S.hasGloves, skins:S.ownedSkins, skin:S.skin })); }catch(e){} }
   function loadGame(){ try{ const raw=localStorage.getItem(SAVE_KEY); if(!raw) return null;
     const d=JSON.parse(raw); if(typeof d.coins!=="number") return null; return d; }catch(e){ return null; } }
   function clearSave(){ try{ localStorage.removeItem(SAVE_KEY); }catch(e){} }
@@ -306,7 +320,8 @@ const TILE_SRC = {"grass_short": "assets/grass_short.png", "grass_tall": "assets
 
   function resize(){
     DPR=Math.min(2,window.devicePixelRatio||1);
-    W=window.innerWidth;H=window.innerHeight;
+    const r=canvas.getBoundingClientRect();
+    W=Math.round(r.width)||window.innerWidth; H=Math.round(r.height)||window.innerHeight;
     canvas.width=Math.round(W*DPR); canvas.height=Math.round(H*DPR);
     ctx.setTransform(DPR,0,0,DPR,0,0);
     layout(); if(tilesReady) buildTileCache();
@@ -679,6 +694,8 @@ const TILE_SRC = {"grass_short": "assets/grass_short.png", "grass_tall": "assets
       if(pointer.dragging){ head.x+=(pointer.ax-head.x)*Math.min(1,L*dt); head.y+=(pointer.ay-head.y)*Math.min(1,L*dt); }
       if(pointer.dragging) windForce(dt);
       head.spin+=(pointer.dragging?0.9:0.25)*dt;
+      if(pointer.dragging){ skinAnim.t+=dt*16.67; if(skinAnim.t>70){ skinAnim.t=0; skinAnim.frame=skinAnim.frame>=MOWER_FRAMES-1?1:skinAnim.frame+1; } }
+      else { skinAnim.frame=0; skinAnim.t=0; }
 
       // drag speed -> effective radius: slow/careful stays precise (base radius) even
       // fully upgraded; only fast swipes unlock the wider upgraded width.
@@ -829,12 +846,20 @@ const TILE_SRC = {"grass_short": "assets/grass_short.png", "grass_tall": "assets
     const rad=pointer.dispRadius||RADIUS_BASE;
     if(pointer.dragging){ ctx.save(); ctx.globalAlpha=0.14; ctx.fillStyle="#eaffdf";
       ctx.beginPath(); ctx.arc(head.x,head.y,rad,0,Math.PI*2); ctx.fill(); ctx.restore(); }
+    if(pointer.down&&pointer.off>0){ ctx.save(); ctx.globalAlpha=.25; ctx.strokeStyle="#fff"; ctx.lineWidth=2;
+      ctx.setLineDash([3,4]); ctx.beginPath(); ctx.moveTo(pointer.x,pointer.y); ctx.lineTo(head.x,head.y); ctx.stroke(); ctx.restore(); }
+    const im=S.skin?skinImg[S.skin]:null;
+    if(im){
+      const fw=im.width/MOWER_FRAMES, fh=im.height, DISP=72, dh=DISP*fh/fw;
+      ctx.save(); ctx.translate(head.x,head.y); ctx.imageSmoothingEnabled=true;
+      ctx.drawImage(im, skinAnim.frame*fw,0,fw,fh, -DISP/2,-dh/2, DISP,dh);
+      if(S.trimmerHP<30){ ctx.globalAlpha=.55; ctx.fillStyle="#c73a2a"; ctx.beginPath(); ctx.arc(0,0,6,0,Math.PI*2); ctx.fill(); }
+      ctx.restore(); return;
+    }
     ctx.save(); ctx.translate(head.x,head.y); ctx.rotate(head.spin);
     ctx.strokeStyle="#e9f7c9"; ctx.lineWidth=2.5; ctx.lineCap="round"; ctx.globalAlpha=.85;
     for(let i=0;i<3;i++){ ctx.rotate(Math.PI*2/3); ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(rad*0.9,0); ctx.stroke(); }
     ctx.restore();
-    if(pointer.down&&pointer.off>0){ ctx.save(); ctx.globalAlpha=.25; ctx.strokeStyle="#fff"; ctx.lineWidth=2;
-      ctx.setLineDash([3,4]); ctx.beginPath(); ctx.moveTo(pointer.x,pointer.y); ctx.lineTo(head.x,head.y); ctx.stroke(); ctx.restore(); }
     ctx.save(); ctx.fillStyle=S.trimmerHP<30?"#c73a2a":S.mowerColor; ctx.beginPath(); ctx.arc(head.x,head.y,10,0,Math.PI*2); ctx.fill();
     ctx.fillStyle="#2b2b2b"; ctx.beginPath(); ctx.arc(head.x,head.y,5,0,Math.PI*2); ctx.fill(); ctx.restore();
   }
@@ -917,13 +942,28 @@ const TILE_SRC = {"grass_short": "assets/grass_short.png", "grass_tall": "assets
   }
   function renderShopCosmetics(){ const shop=document.getElementById("shopCosmetics"); shop.innerHTML="";
     const crow=document.createElement("div"); crow.className="up";
-    const swatches=MOWER_COLORS.map(c=>`<button class="swatch${c===S.mowerColor?" sel":""}" data-c="${c}" style="background:${c}"></button>`).join("");
-    crow.innerHTML=`<div class="t"><b>Mower color</b><span>Personalize your trimmer</span></div>
+    const swatches=MOWER_COLORS.map(c=>`<button class="swatch${(!S.skin&&c===S.mowerColor)?" sel":""}" data-c="${c}" style="background:${c}"></button>`).join("");
+    crow.innerHTML=`<div class="t"><b>Mower color</b><span>Classic trimmer</span></div>
       <div class="swrow">${swatches}</div>`;
-    crow.querySelectorAll(".swatch").forEach(sw=>{ sw.onclick=()=>{ S.mowerColor=sw.dataset.c;
-      crow.querySelectorAll(".swatch").forEach(x=>x.classList.remove("sel")); sw.classList.add("sel");
-      vibrate(10); saveGame(); }; });
+    crow.querySelectorAll(".swatch").forEach(sw=>{ sw.onclick=()=>{ S.mowerColor=sw.dataset.c; S.skin=null;
+      vibrate(10); saveGame(); renderShopCosmetics(); }; });
     shop.appendChild(crow);
+    MOWER_SKINS.forEach(s=>{
+      const owned=S.ownedSkins.includes(s.k), equipped=S.skin===s.k;
+      const row=document.createElement("div"); row.className="up";
+      const btn = equipped ? `<button class="btn small ghost" disabled>Equipped</button>`
+        : owned ? `<button class="btn small" data-eq="${s.k}">Equip</button>`
+        : `<button class="btn small" data-buy="${s.k}">${s.c} 🪙</button>`;
+      row.innerHTML=`<div style="display:flex;align-items:center;gap:10px;flex:1;min-width:0">
+          <div class="mowerthumb" style="background-image:url(assets/mowers/${s.k}.png)"></div>
+          <div class="t"><b>${s.n}</b><span>${owned?"Owned":"Animated skin"}</span></div>
+        </div>${btn}`;
+      const bB=row.querySelector("[data-buy]"), eB=row.querySelector("[data-eq]");
+      if(bB) bB.onclick=()=>{ if(S.coins>=s.c){ S.coins-=s.c; S.ownedSkins.push(s.k); S.skin=s.k;
+        updateHUD(); vibrate(15); saveGame(); renderShopCosmetics(); } else vibrate(4); };
+      if(eB) eB.onclick=()=>{ S.skin=s.k; vibrate(10); saveGame(); renderShopCosmetics(); };
+      shop.appendChild(row);
+    });
   }
   function renderShop(){ renderShopUpgrades(); renderShopCosmetics(); }
 
@@ -987,7 +1027,7 @@ const TILE_SRC = {"grass_short": "assets/grass_short.png", "grass_tall": "assets
   function applySave(d){
     S.coins=d.coins; S.maxLevel=d.maxLevel||1; S.up.radius=d.upR||0; S.up.turbo=d.upT||0;
     S.shovels=(typeof d.shovels==="number")?d.shovels:1; S.mowerColor=d.color||"#e8503a";
-    S.hasGloves=!!d.gloves;
+    S.hasGloves=!!d.gloves; S.ownedSkins=Array.isArray(d.skins)?d.skins:[]; S.skin=d.skin||null;
   }
 
   function beginPlay(level, replay){
